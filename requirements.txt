@@ -1,0 +1,33 @@
+# GCIS CoA Automation — Python Dependencies
+
+# Web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# Database
+sqlalchemy>=2.0.0
+alembic>=1.14.0
+
+# Task queue
+celery[redis]>=5.4.0
+redis>=5.2.0
+
+# PDF processing
+pikepdf>=9.0.0
+pdf2image>=1.17.0
+Pillow>=11.0.0
+
+# AI
+anthropic>=0.40.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-jose>=3.3.0   # For generating secure access tokens
+httpx>=0.27.0
+
+# Development
+pytest>=8.0.0
+pytest-asyncio>=0.24.0

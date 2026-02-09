@@ -1,0 +1,26 @@
+# Environment
+.env
+venv/
+__pycache__/
+*.pyc
+
+# Database
+*.db
+
+# Storage (uploaded/processed files)
+storage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+*:Zone.Identifier
+
+# Test/build artifacts
+.pytest_cache/
+htmlcov/
+*.egg-info/
+dist/
+build/
