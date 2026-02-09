@@ -40,6 +40,12 @@ import type {
   ProductDetail,
   AccessToken,
   DashboardStats,
+  SharePointSite,
+  SharePointDrive,
+  SharePointFolder,
+  SharePointUploadResult,
+  ZohoProductPreview,
+  ZohoPushResult,
 } from "./types";
 
 export async function listJobs(): Promise<Job[]> {
@@ -168,4 +174,59 @@ export async function deleteAccessToken(id: string) {
 
 export async function validateToken(token: string) {
   return request<{ valid: boolean; label: string; tiers: string[] }>(`/api/access/validate/${token}`);
+}
+
+// ── SharePoint ──────────────────────────────────────────────────
+
+export async function listSharePointSites(): Promise<SharePointSite[]> {
+  return request("/api/sharepoint/sites");
+}
+
+export async function listSharePointDrives(siteId: string): Promise<SharePointDrive[]> {
+  return request(`/api/sharepoint/sites/${encodeURIComponent(siteId)}/drives`);
+}
+
+export async function listSharePointFolders(
+  siteId: string,
+  driveId: string,
+  folderId: string = "root",
+): Promise<SharePointFolder[]> {
+  const qs = new URLSearchParams({ folder_id: folderId });
+  return request(`/api/sharepoint/sites/${encodeURIComponent(siteId)}/drives/${encodeURIComponent(driveId)}/folders?${qs}`);
+}
+
+export async function createSharePointFolder(
+  driveId: string,
+  parentFolderId: string,
+  folderName: string,
+): Promise<SharePointFolder> {
+  return request("/api/sharepoint/folders", {
+    method: "POST",
+    body: JSON.stringify({ drive_id: driveId, parent_folder_id: parentFolderId, folder_name: folderName }),
+  });
+}
+
+export async function uploadToSharePoint(
+  jobId: string,
+  siteId: string,
+  driveId: string,
+  folderId: string,
+): Promise<SharePointUploadResult> {
+  return request("/api/sharepoint/upload", {
+    method: "POST",
+    body: JSON.stringify({ job_id: jobId, site_id: siteId, drive_id: driveId, folder_id: folderId }),
+  });
+}
+
+// ── Zoho CRM ────────────────────────────────────────────────────
+
+export async function getZohoPreview(jobId: string): Promise<ZohoProductPreview> {
+  return request(`/api/zoho/preview/${jobId}`);
+}
+
+export async function pushToZoho(jobId: string): Promise<ZohoPushResult> {
+  return request("/api/zoho/push", {
+    method: "POST",
+    body: JSON.stringify({ job_id: jobId }),
+  });
 }

@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     # Image processing
     max_image_dimension: int = 1568  # Max px on longest side for Claude Vision
 
+    # Microsoft / SharePoint
+    ms_tenant_id: str = ""
+    ms_client_id: str = ""
+    ms_client_secret: str = ""
+
+    # Zoho CRM
+    zoho_client_id: str = ""
+    zoho_client_secret: str = ""
+    zoho_refresh_token: str = ""
+    zoho_data_center: str = "CA"  # US, CA, or EU
+
     # Admin auth
     admin_user: str = "admin"
     admin_password: str = "changeme"

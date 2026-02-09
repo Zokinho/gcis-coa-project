@@ -66,6 +66,24 @@ export interface AccessToken {
   use_count: number;
 }
 
+// ── SharePoint ──────────────────────────────────────────────────
+
+export interface SharePointSite { id: string; name: string; web_url: string }
+export interface SharePointDrive { id: string; name: string }
+export interface SharePointFolder { id: string; name: string }
+export interface SharePointUploadResult { id: string; name: string; web_url: string }
+
+// ── Zoho CRM ───────────────────────────────────────────────────
+
+export interface ZohoProductPreview {
+  fields: Record<string, string | number | null>;
+  pdf_filename: string;
+}
+export interface ZohoPushResult {
+  record_id: string;
+  record_url: string;
+}
+
 export interface RedactionUpdate {
   approved?: boolean;
   x_pct?: number;

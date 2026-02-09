@@ -14,6 +14,8 @@ import {
 } from "@/lib/api";
 import type { Job, Product, RedactionRegion } from "@/lib/types";
 import RedactionPreview from "@/components/RedactionPreview";
+import SharePointPicker from "@/components/SharePointPicker";
+import ZohoPushModal from "@/components/ZohoPushModal";
 
 export default function ReviewDetailPage() {
   const params = useParams<{ jobId: string }>();
@@ -27,6 +29,10 @@ export default function ReviewDetailPage() {
   const [error, setError] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [showSharePoint, setShowSharePoint] = useState(false);
+  const [sharePointUrl, setSharePointUrl] = useState("");
+  const [showZoho, setShowZoho] = useState(false);
+  const [zohoUrl, setZohoUrl] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -129,6 +135,22 @@ export default function ReviewDetailPage() {
           >
             {publishing ? "Publishing..." : "Publish"}
           </button>
+          {job.status === "published" && (
+            <>
+              <button
+                onClick={() => setShowSharePoint(true)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+              >
+                Send to SharePoint
+              </button>
+              <button
+                onClick={() => setShowZoho(true)}
+                className="px-4 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 transition"
+              >
+                Send to Zoho CRM
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -136,6 +158,72 @@ export default function ReviewDetailPage() {
         <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
           {error}
         </p>
+      )}
+
+      {sharePointUrl && (
+        <div className="text-sm bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded flex items-center justify-between">
+          <span>
+            PDF uploaded to SharePoint.{" "}
+            <a
+              href={sharePointUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Open in SharePoint
+            </a>
+          </span>
+          <button
+            onClick={() => setSharePointUrl("")}
+            className="text-green-600 hover:text-green-800 ml-4"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {showSharePoint && (
+        <SharePointPicker
+          jobId={jobId}
+          onClose={() => setShowSharePoint(false)}
+          onSuccess={(webUrl) => {
+            setShowSharePoint(false);
+            setSharePointUrl(webUrl);
+          }}
+        />
+      )}
+
+      {zohoUrl && (
+        <div className="text-sm bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded flex items-center justify-between">
+          <span>
+            Product pushed to Zoho CRM.{" "}
+            <a
+              href={zohoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Open in Zoho CRM
+            </a>
+          </span>
+          <button
+            onClick={() => setZohoUrl("")}
+            className="text-green-600 hover:text-green-800 ml-4"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {showZoho && (
+        <ZohoPushModal
+          jobId={jobId}
+          onClose={() => setShowZoho(false)}
+          onSuccess={(recordUrl) => {
+            setShowZoho(false);
+            setZohoUrl(recordUrl);
+          }}
+        />
       )}
 
       {/* Product info */}

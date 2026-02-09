@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import access, admin, jobs, products, upload
+from backend.routers import access, admin, jobs, products, sharepoint, upload, zoho
 
 # Configure logging
 logging.basicConfig(
@@ -37,6 +37,8 @@ app.include_router(jobs.router)
 app.include_router(admin.router)
 app.include_router(products.router)
 app.include_router(access.router)
+app.include_router(sharepoint.router)
+app.include_router(zoho.router)
 
 
 @app.on_event("startup")
