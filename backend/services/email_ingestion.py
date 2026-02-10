@@ -24,7 +24,7 @@ from backend.models import (
     EmailIngestionStatus,
     JobStatus,
 )
-from backend.tasks.process_coa import process_coa
+from backend.tasks.dispatch import send_process_coa
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +182,11 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
     if not raw_attachments:
         ingestion.status = EmailIngestionStatus.review
         db.commit()
+        try:
+            from backend.tasks.notification_tasks import dispatch_new_email_notification
+            dispatch_new_email_notification(ingestion.id, subject, sender, 0, 0)
+        except Exception:
+            logger.exception("Failed to dispatch new-email notification for %s", ingestion.id)
         return ingestion
 
     coa_attachments: list[EmailAttachment] = []
@@ -242,12 +247,19 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
 
         att.job_id = job.id
 
-        # Spawn processing thread
-        thread = threading.Thread(target=process_coa, args=(job.id,), daemon=True)
-        thread.start()
+        # Dispatch to Celery (falls back to threading if Redis unavailable)
+        send_process_coa(job.id)
 
     ingestion.status = EmailIngestionStatus.review
     db.commit()
+
+    try:
+        from backend.tasks.notification_tasks import dispatch_new_email_notification
+        dispatch_new_email_notification(
+            ingestion.id, subject, sender, len(raw_attachments), len(coa_attachments),
+        )
+    except Exception:
+        logger.exception("Failed to dispatch new-email notification for %s", ingestion.id)
 
     logger.info("Processed email: %s (%d attachments, %d CoAs)", subject, len(raw_attachments), len(coa_attachments))
     return ingestion

@@ -63,6 +63,17 @@ class Settings(BaseSettings):
     evernote_is_business: bool = True
     evernote_notebook_guid: str = ""
 
+    # SMTP email notifications
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    smtp_from_email: str = ""
+    smtp_from_name: str = "GCIS CoA Automation"
+    notification_admin_email: str = ""
+    notifications_enabled: bool = False
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property

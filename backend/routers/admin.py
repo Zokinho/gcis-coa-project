@@ -3,7 +3,6 @@
 import logging
 import shutil
 from pathlib import Path
-from threading import Thread
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
@@ -24,7 +23,7 @@ from backend.models import (
     RedactionRegion,
     AccessToken,
 )
-from backend.tasks.process_coa import process_coa
+from backend.tasks.dispatch import send_process_coa
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
@@ -141,8 +140,7 @@ def rescan_job(
     db.commit()
     db.refresh(job)
 
-    thread = Thread(target=process_coa, args=(job.id,), daemon=True)
-    thread.start()
+    send_process_coa(job.id)
     return job
 
 

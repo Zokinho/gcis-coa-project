@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from backend.celery_app import celery
 from backend.config import settings
 from backend.database import SessionLocal
 from backend.models import CoAJob, JobStatus, RedactionRegion, Confidence
@@ -18,7 +19,8 @@ from backend.services.publisher import publish_product
 logger = logging.getLogger(__name__)
 
 
-def process_coa(job_id: str) -> None:
+@celery.task(bind=True, max_retries=2, default_retry_delay=30)
+def process_coa(self, job_id: str) -> None:
     """Run the full CoA processing pipeline for a given job.
 
     Steps:
@@ -103,6 +105,13 @@ def process_coa(job_id: str) -> None:
 
         logger.info("[%s] Pipeline complete — product %s (%s)", job.id, product.name, product.id)
 
+        # Dispatch admin notification
+        try:
+            from backend.tasks.notification_tasks import dispatch_job_ready_notification
+            dispatch_job_ready_notification(job.id, job.filename, product.name if product else "")
+        except Exception:
+            logger.exception("[%s] Failed to dispatch review notification", job.id)
+
     except Exception as e:
         logger.exception("[%s] Pipeline error: %s", job_id, e)
         try:
@@ -111,6 +120,10 @@ def process_coa(job_id: str) -> None:
                 _fail(db, job, str(e))
         except Exception:
             logger.exception("Failed to update job status on error")
+
+        # Retry transient errors via Celery (only when running as a Celery task)
+        if hasattr(self, "request") and self.request.id is not None:
+            raise self.retry(exc=e)
     finally:
         db.close()
 

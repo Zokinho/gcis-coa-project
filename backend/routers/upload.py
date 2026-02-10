@@ -2,7 +2,6 @@
 
 import logging
 import shutil
-from threading import Thread
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.config import settings
 from backend.database import get_db
 from backend.models import CoAJob, JobResponse
-from backend.tasks.process_coa import process_coa
+from backend.tasks.dispatch import send_process_coa
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -46,8 +45,7 @@ async def upload_coa(
 
     logger.info("Created job %s for file %s", job.id, file.filename)
 
-    # Start processing in background thread (Phase 1 — no Celery yet)
-    thread = Thread(target=process_coa, args=(job.id,), daemon=True)
-    thread.start()
+    # Dispatch to Celery (falls back to threading if Redis unavailable)
+    send_process_coa(job.id)
 
     return job

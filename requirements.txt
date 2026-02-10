@@ -29,6 +29,9 @@ msgraph-sdk>=1.12.0
 evernote3>=1.25.14
 python-oauth2>=1.1.1
 
+# Email (SMTP)
+aiosmtplib>=3.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.0.0

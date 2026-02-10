@@ -1,7 +1,6 @@
 """Email ingestion router — manage ingested emails, attachments, and client confirmation."""
 
 import logging
-import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -28,7 +27,7 @@ from backend.services.email_ingestion import (
     image_to_pdf,
     poll_inbox_once,
 )
-from backend.tasks.process_coa import process_coa
+from backend.tasks.dispatch import send_process_coa
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["email"])
@@ -147,8 +146,7 @@ async def reclassify_attachment(
             db.flush()
             att.job_id = job.id
 
-            thread = threading.Thread(target=process_coa, args=(job.id,), daemon=True)
-            thread.start()
+            send_process_coa(job.id)
 
     db.commit()
     db.refresh(att)

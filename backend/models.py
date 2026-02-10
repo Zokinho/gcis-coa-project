@@ -163,6 +163,25 @@ class RedactionRegion(Base):
     job: Mapped["CoAJob"] = relationship(back_populates="redaction_regions")
 
 
+class NotificationType(str, enum.Enum):
+    job_ready_for_review = "job_ready_for_review"
+    new_email_ingested = "new_email_ingested"
+
+
+class NotificationLog(Base):
+    __tablename__ = "notification_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    notification_type: Mapped[NotificationType] = mapped_column(Enum(NotificationType))
+    recipient: Mapped[str] = mapped_column(String(512))
+    subject: Mapped[str] = mapped_column(String(1024))
+    body_html: Mapped[str] = mapped_column(Text)
+    related_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AccessToken(Base):
     __tablename__ = "access_tokens"
 
