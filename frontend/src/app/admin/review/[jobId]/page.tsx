@@ -16,6 +16,7 @@ import type { Job, Product, RedactionRegion } from "@/lib/types";
 import RedactionPreview from "@/components/RedactionPreview";
 import SharePointPicker from "@/components/SharePointPicker";
 import ZohoPushModal from "@/components/ZohoPushModal";
+import EvernotePushModal from "@/components/EvernotePushModal";
 
 export default function ReviewDetailPage() {
   const params = useParams<{ jobId: string }>();
@@ -33,6 +34,8 @@ export default function ReviewDetailPage() {
   const [sharePointUrl, setSharePointUrl] = useState("");
   const [showZoho, setShowZoho] = useState(false);
   const [zohoUrl, setZohoUrl] = useState("");
+  const [showEvernote, setShowEvernote] = useState(false);
+  const [evernoteUrl, setEvernoteUrl] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -149,6 +152,12 @@ export default function ReviewDetailPage() {
               >
                 Send to Zoho CRM
               </button>
+              <button
+                onClick={() => setShowEvernote(true)}
+                className="px-4 py-2 text-sm bg-green-700 text-white rounded-md hover:bg-green-800 transition"
+              >
+                Send to Evernote
+              </button>
             </>
           )}
         </div>
@@ -226,6 +235,39 @@ export default function ReviewDetailPage() {
         />
       )}
 
+      {evernoteUrl && (
+        <div className="text-sm bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded flex items-center justify-between">
+          <span>
+            Product data sent to Evernote.{" "}
+            <a
+              href={evernoteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Open in Evernote
+            </a>
+          </span>
+          <button
+            onClick={() => setEvernoteUrl("")}
+            className="text-green-600 hover:text-green-800 ml-4"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {showEvernote && (
+        <EvernotePushModal
+          jobId={jobId}
+          onClose={() => setShowEvernote(false)}
+          onSuccess={(noteUrl) => {
+            setShowEvernote(false);
+            setEvernoteUrl(noteUrl);
+          }}
+        />
+      )}
+
       {/* Product info */}
       {product && (
         <div className="bg-white rounded-lg border p-4">
@@ -247,6 +289,12 @@ export default function ReviewDetailPage() {
               <span className="text-gray-500">Tier</span>
               <p className="font-medium text-gray-900 capitalize">{product.tier}</p>
             </div>
+            {product.client_name && (
+              <div>
+                <span className="text-gray-500">Client</span>
+                <p className="font-medium text-gray-900">{product.client_name}</p>
+              </div>
+            )}
           </div>
         </div>
       )}

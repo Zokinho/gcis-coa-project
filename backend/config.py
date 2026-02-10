@@ -47,6 +47,22 @@ class Settings(BaseSettings):
     admin_secret_key: str = "change-this-to-a-random-secret"
     admin_token_expire_hours: int = 24
 
+    # IMAP email ingestion
+    imap_host: str = ""
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_password: str = ""
+    imap_use_ssl: bool = True
+    imap_poll_interval_seconds: int = 120
+    imap_folder: str = "INBOX"
+    email_ingestion_enabled: bool = False
+
+    # Evernote
+    evernote_developer_token: str = ""
+    evernote_sandbox: bool = False
+    evernote_is_business: bool = True
+    evernote_notebook_guid: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property
@@ -74,6 +90,18 @@ class Settings(BaseSettings):
     @property
     def published_path(self) -> Path:
         p = self.storage_path / "published"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
+    def email_attachments_path(self) -> Path:
+        p = self.storage_path / "email_attachments"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
+    def photos_path(self) -> Path:
+        p = self.storage_path / "photos"
         p.mkdir(parents=True, exist_ok=True)
         return p
 

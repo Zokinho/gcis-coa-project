@@ -36,11 +36,58 @@ class Confidence(str, enum.Enum):
     low = "low"
 
 
+class EmailIngestionStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    review = "review"
+    completed = "completed"
+    error = "error"
+
+
+class AttachmentType(str, enum.Enum):
+    coa_pdf = "coa_pdf"
+    coa_photo = "coa_photo"
+    product_photo = "product_photo"
+
+
 # ── SQLAlchemy Models ──────────────────────────────────────────────
 
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+class EmailIngestion(Base):
+    __tablename__ = "email_ingestions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(String(512), unique=True, index=True)
+    subject: Mapped[str] = mapped_column(String(1024), default="")
+    sender: Mapped[str] = mapped_column(String(512), default="")
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[EmailIngestionStatus] = mapped_column(Enum(EmailIngestionStatus), default=EmailIngestionStatus.pending)
+    suggested_client: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    confirmed_client: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    attachments: Mapped[list["EmailAttachment"]] = relationship(back_populates="email_ingestion", cascade="all, delete-orphan")
+
+
+class EmailAttachment(Base):
+    __tablename__ = "email_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email_ingestion_id: Mapped[str] = mapped_column(String(36), ForeignKey("email_ingestions.id"))
+    original_filename: Mapped[str] = mapped_column(String(512))
+    stored_filename: Mapped[str] = mapped_column(String(255))
+    attachment_type: Mapped[AttachmentType] = mapped_column(Enum(AttachmentType), default=AttachmentType.product_photo)
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("coa_jobs.id"), nullable=True)
+
+    email_ingestion: Mapped["EmailIngestion"] = relationship(back_populates="attachments")
+    job: Mapped["CoAJob | None"] = relationship(back_populates="email_attachment")
 
 
 class CoAJob(Base):
@@ -54,9 +101,11 @@ class CoAJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     product_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("products.id"), nullable=True)
+    email_ingestion_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("email_ingestions.id"), nullable=True)
 
     product: Mapped["Product | None"] = relationship(back_populates="job")
     redaction_regions: Mapped[list["RedactionRegion"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    email_attachment: Mapped["EmailAttachment | None"] = relationship(back_populates="job")
 
 
 class Product(Base):
@@ -74,6 +123,7 @@ class Product(Base):
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.draft)
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     tags: Mapped[dict | list] = mapped_column(JSON, default=list)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     search_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -142,6 +192,7 @@ class JobResponse(BaseModel):
     error_message: str | None = None
     page_count: int
     product_id: str | None = None
+    email_ingestion_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -181,6 +232,7 @@ class ProductResponse(BaseModel):
     status: ProductStatus
     available: bool
     tags: list[str] = []
+    client_name: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -211,6 +263,7 @@ class ProductDetailResponse(BaseModel):
     status: ProductStatus
     available: bool
     tags: list[str] = []
+    client_name: str | None = None
     created_at: datetime
     test_data: list[ProductTestDataResponse] = []
 
@@ -292,3 +345,59 @@ class ExtractionResult(BaseModel):
     lab_notes: str | None = None
 
     redaction_regions: list[dict] = Field(default_factory=list)
+
+
+# ── Email + Evernote Schemas ─────────────────────────────────────
+
+
+class EmailAttachmentResponse(BaseModel):
+    id: str
+    original_filename: str
+    stored_filename: str
+    attachment_type: AttachmentType
+    file_size: int
+    job_id: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class EmailIngestionResponse(BaseModel):
+    id: str
+    message_id: str
+    subject: str
+    sender: str
+    body_text: str | None = None
+    received_at: datetime | None = None
+    status: EmailIngestionStatus
+    suggested_client: str | None = None
+    confirmed_client: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    attachments: list[EmailAttachmentResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class EmailClientConfirm(BaseModel):
+    client_name: str
+
+
+class EmailAttachmentReclassify(BaseModel):
+    attachment_type: AttachmentType
+
+
+class EvernotePreview(BaseModel):
+    note_title: str
+    is_new_note: bool
+    content_html: str
+
+
+class EvernotePushRequest(BaseModel):
+    job_id: str
+    client_name: str | None = None
+
+
+class EvernotePushResult(BaseModel):
+    note_guid: str
+    note_title: str
+    note_url: str

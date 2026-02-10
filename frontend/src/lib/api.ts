@@ -46,6 +46,12 @@ import type {
   SharePointUploadResult,
   ZohoProductPreview,
   ZohoPushResult,
+  EmailIngestion,
+  EmailIngestionStatus,
+  EmailAttachment,
+  AttachmentType,
+  EvernotePreview,
+  EvernotePushResult,
 } from "./types";
 
 export async function listJobs(): Promise<Job[]> {
@@ -228,5 +234,54 @@ export async function pushToZoho(jobId: string): Promise<ZohoPushResult> {
   return request("/api/zoho/push", {
     method: "POST",
     body: JSON.stringify({ job_id: jobId }),
+  });
+}
+
+// ── Email Ingestion ─────────────────────────────────────────────
+
+export async function listEmailIngestions(status?: EmailIngestionStatus): Promise<EmailIngestion[]> {
+  const qs = status ? `?status=${status}` : "";
+  return request(`/api/email/ingestions${qs}`);
+}
+
+export async function getEmailIngestion(id: string): Promise<EmailIngestion> {
+  return request(`/api/email/ingestions/${id}`);
+}
+
+export async function confirmEmailClient(ingestionId: string, clientName: string): Promise<EmailIngestion> {
+  return request(`/api/email/ingestions/${ingestionId}/client`, {
+    method: "PATCH",
+    body: JSON.stringify({ client_name: clientName }),
+  });
+}
+
+export async function reclassifyAttachment(
+  attachmentId: string,
+  attachmentType: AttachmentType,
+): Promise<EmailAttachment> {
+  return request(`/api/email/attachments/${attachmentId}/reclassify`, {
+    method: "PATCH",
+    body: JSON.stringify({ attachment_type: attachmentType }),
+  });
+}
+
+export function getAttachmentFileUrl(attachmentId: string): string {
+  return `${API}/api/email/attachments/${attachmentId}/file`;
+}
+
+export async function triggerEmailPoll(): Promise<{ polled: boolean; new_emails: number }> {
+  return request("/api/email/poll", { method: "POST" });
+}
+
+// ── Evernote ────────────────────────────────────────────────────
+
+export async function getEvernotePreview(jobId: string): Promise<EvernotePreview> {
+  return request(`/api/evernote/preview/${jobId}`);
+}
+
+export async function pushToEvernote(jobId: string, clientName?: string): Promise<EvernotePushResult> {
+  return request("/api/evernote/push", {
+    method: "POST",
+    body: JSON.stringify({ job_id: jobId, client_name: clientName }),
   });
 }

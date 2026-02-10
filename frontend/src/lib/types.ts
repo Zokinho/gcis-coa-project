@@ -38,6 +38,7 @@ export interface Product {
   status: ProductStatus;
   available: boolean;
   tags: string[];
+  client_name: string | null;
   created_at: string;
 }
 
@@ -90,6 +91,49 @@ export interface RedactionUpdate {
   y_pct?: number;
   w_pct?: number;
   h_pct?: number;
+}
+
+// ── Email Ingestion ─────────────────────────────────────────────
+
+export type EmailIngestionStatus = "pending" | "processing" | "review" | "completed" | "error";
+export type AttachmentType = "coa_pdf" | "coa_photo" | "product_photo";
+
+export interface EmailAttachment {
+  id: string;
+  original_filename: string;
+  stored_filename: string;
+  attachment_type: AttachmentType;
+  file_size: number;
+  job_id: string | null;
+}
+
+export interface EmailIngestion {
+  id: string;
+  message_id: string;
+  subject: string;
+  sender: string;
+  body_text: string | null;
+  received_at: string | null;
+  status: EmailIngestionStatus;
+  suggested_client: string | null;
+  confirmed_client: string | null;
+  error_message: string | null;
+  created_at: string;
+  attachments: EmailAttachment[];
+}
+
+// ── Evernote ────────────────────────────────────────────────────
+
+export interface EvernotePreview {
+  note_title: string;
+  is_new_note: boolean;
+  content_html: string;
+}
+
+export interface EvernotePushResult {
+  note_guid: string;
+  note_title: string;
+  note_url: string;
 }
 
 export interface DashboardStats {

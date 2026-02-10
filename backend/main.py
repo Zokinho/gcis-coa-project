@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import access, admin, jobs, products, sharepoint, upload, zoho
+from backend.routers import access, admin, email, evernote, jobs, products, sharepoint, upload, zoho
 
 # Configure logging
 logging.basicConfig(
@@ -39,12 +39,18 @@ app.include_router(products.router)
 app.include_router(access.router)
 app.include_router(sharepoint.router)
 app.include_router(zoho.router)
+app.include_router(email.router)
+app.include_router(evernote.router)
 
 
 @app.on_event("startup")
 def on_startup():
     init_db()
     logging.getLogger(__name__).info("Database initialized")
+
+    # Start email poller if enabled
+    from backend.services.email_ingestion import start_email_poller
+    start_email_poller()
 
 
 @app.get("/health")

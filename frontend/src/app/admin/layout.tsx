@@ -8,6 +8,7 @@ import { getMe, logout } from "@/lib/api";
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/upload", label: "Upload" },
+  { href: "/admin/inbox", label: "Inbox" },
   { href: "/admin/review", label: "Review" },
   { href: "/admin/tokens", label: "Tokens" },
 ];
