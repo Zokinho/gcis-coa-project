@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import access, admin, email, evernote, jobs, products, sharepoint, upload, zoho
+from backend.routers import access, admin, email, evernote, evernote_import, jobs, products, sharepoint, shares, upload, zoho
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +41,8 @@ app.include_router(sharepoint.router)
 app.include_router(zoho.router)
 app.include_router(email.router)
 app.include_router(evernote.router)
+app.include_router(evernote_import.router)
+app.include_router(shares.router)
 
 
 @app.on_event("startup")

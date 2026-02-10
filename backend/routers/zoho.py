@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.auth import get_admin_user
 from backend.config import settings
 from backend.database import get_db
-from backend.models import CoAJob, JobStatus, Product, ProductTestData
+from backend.models import CoAJob, JobStatus, Product, ProductTestData, SyncLog, SyncTarget
 from backend.services.zoho_crm import build_field_mapping, push_product_with_pdf
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,16 @@ async def zoho_push(
 
     try:
         result = await push_product_with_pdf(product, test_data, pdf_path)
+
+        sync_log = SyncLog(
+            product_id=product.id,
+            target=SyncTarget.zoho,
+            external_id=result.get("record_id", ""),
+            external_url=result.get("record_url", ""),
+        )
+        db.add(sync_log)
+        db.commit()
+
         return result
     except Exception as exc:
         logger.exception("Zoho CRM push failed")

@@ -136,6 +136,121 @@ export interface EvernotePushResult {
   note_url: string;
 }
 
+// ── Sync Tracking ──────────────────────────────────────────────
+
+export type SyncTarget = "evernote" | "sharepoint" | "zoho";
+
+export interface SyncLog {
+  id: string;
+  product_id: string;
+  target: SyncTarget;
+  external_id: string;
+  external_url: string;
+  extra: Record<string, unknown>;
+  synced_at: string;
+}
+
+export interface ProductPhoto {
+  id: string;
+  product_id: string;
+  original_filename: string;
+  stored_filename: string;
+  mime_type: string;
+  file_size: number;
+  source: string;
+  created_at: string;
+}
+
+// ── Evernote Import ────────────────────────────────────────────
+
+export type EvernoteImportStatus = "pending" | "processing" | "completed" | "error";
+
+export interface EvernoteNoteListItem {
+  guid: string;
+  title: string;
+  updated: string | null;
+  resource_count: number;
+  already_imported: boolean;
+}
+
+export interface EvernoteNoteResource {
+  guid: string;
+  filename: string;
+  mime: string;
+  size: number;
+  is_pdf: boolean;
+  is_image: boolean;
+}
+
+export interface EvernoteNoteDetail {
+  guid: string;
+  title: string;
+  client_name: string;
+  resources: EvernoteNoteResource[];
+  pdf_count: number;
+  photo_count: number;
+}
+
+export interface EvernoteImportRecord {
+  id: string;
+  note_guid: string;
+  note_title: string;
+  client_name: string;
+  status: EvernoteImportStatus;
+  pdfs_found: number;
+  photos_found: number;
+  pdfs_imported: number;
+  photos_imported: number;
+  error_message: string | null;
+  created_at: string;
+}
+
+// ── Curated Shares ─────────────────────────────────────────────
+
+export interface CuratedShare {
+  id: string;
+  token: string;
+  label: string;
+  product_ids: string[];
+  active: boolean;
+  expires_at: string | null;
+  created_at: string;
+  last_used: string | null;
+  use_count: number;
+}
+
+// ── Client Records ──────────────────────────────────────────────
+
+export interface ClientSummary {
+  client_name: string;
+  product_count: number;
+  latest_test_date: string | null;
+  tiers: string[];
+}
+
+export interface ClientProduct {
+  id: string;
+  name: string;
+  strain_type: string | null;
+  lot_number: string;
+  lab: string;
+  test_date: string | null;
+  tier: string;
+  status: ProductStatus;
+  pdf_filename: string | null;
+  pdf_page_count: number;
+  pdf_file_size: number;
+  job_id: string | null;
+  syncs: SyncLog[];
+  photos: ProductPhoto[];
+}
+
+export interface PdfInfo {
+  filename: string;
+  file_size: number;
+  page_count: number;
+}
+
 export interface DashboardStats {
   total_jobs: number;
   queued: number;

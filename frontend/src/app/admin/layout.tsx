@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: "/admin/upload", label: "Upload" },
   { href: "/admin/inbox", label: "Inbox" },
   { href: "/admin/review", label: "Review" },
+  { href: "/admin/clients", label: "Clients" },
+  { href: "/admin/shares", label: "Shares" },
   { href: "/admin/tokens", label: "Tokens" },
 ];
 

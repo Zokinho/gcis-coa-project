@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.auth import get_admin_user
 from backend.config import settings
 from backend.database import get_db
-from backend.models import CoAJob, JobStatus, Product
+from backend.models import CoAJob, JobStatus, Product, SyncLog, SyncTarget
 from backend.services.sharepoint import create_folder, list_drives, list_folder_children, list_sites, upload_pdf
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,17 @@ async def upload_to_sharepoint(
             file_path=pdf_path,
             filename=pdf_path.name,
         )
+
+        sync_log = SyncLog(
+            product_id=product.id,
+            target=SyncTarget.sharepoint,
+            external_id=result.get("id", ""),
+            external_url=result.get("web_url", ""),
+            extra={"name": result.get("name", "")},
+        )
+        db.add(sync_log)
+        db.commit()
+
         return result
     except Exception as exc:
         logger.exception("Graph API error uploading PDF")

@@ -40,6 +40,9 @@ import type {
   ProductDetail,
   AccessToken,
   DashboardStats,
+  ClientSummary,
+  ClientProduct,
+  PdfInfo,
   SharePointSite,
   SharePointDrive,
   SharePointFolder,
@@ -52,6 +55,10 @@ import type {
   AttachmentType,
   EvernotePreview,
   EvernotePushResult,
+  EvernoteNoteListItem,
+  EvernoteNoteDetail,
+  EvernoteImportRecord,
+  CuratedShare,
 } from "./types";
 
 export async function listJobs(): Promise<Job[]> {
@@ -88,9 +95,10 @@ export async function getJobProduct(jobId: string): Promise<Product> {
   return request(`/api/jobs/${jobId}/product`);
 }
 
-export async function uploadCoA(file: File): Promise<Job> {
+export async function uploadCoA(file: File, clientName?: string): Promise<Job> {
   const form = new FormData();
   form.append("file", file);
+  if (clientName) form.append("client_name", clientName);
   const res = await fetch(`${API}/api/upload`, {
     method: "POST",
     credentials: "include",
@@ -122,6 +130,22 @@ export async function updateProduct(productId: string, data: Partial<Product>): 
 
 export async function getStats(): Promise<DashboardStats> {
   return request("/api/admin/stats");
+}
+
+// ── Client Records ──────────────────────────────────────────────
+
+export async function listClients(q?: string): Promise<ClientSummary[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  return request(`/api/admin/clients${qs}`);
+}
+
+export async function listClientProducts(clientName: string): Promise<ClientProduct[]> {
+  return request(`/api/admin/clients/${encodeURIComponent(clientName)}/products`);
+}
+
+export async function getProductPdfInfo(productId: string, token?: string): Promise<PdfInfo> {
+  const qs = token ? `?token=${token}` : "";
+  return request(`/api/products/${productId}/pdf-info${qs}`);
 }
 
 // ── Products ─────────────────────────────────────────────────────
@@ -284,4 +308,71 @@ export async function pushToEvernote(jobId: string, clientName?: string): Promis
     method: "POST",
     body: JSON.stringify({ job_id: jobId, client_name: clientName }),
   });
+}
+
+// ── Evernote Import ─────────────────────────────────────────────
+
+export async function listEvernoteNotes(): Promise<EvernoteNoteListItem[]> {
+  return request("/api/evernote/notes");
+}
+
+export async function getEvernoteNoteDetail(guid: string): Promise<EvernoteNoteDetail> {
+  return request(`/api/evernote/notes/${guid}`);
+}
+
+export async function triggerEvernoteImport(guid: string, clientName?: string): Promise<EvernoteImportRecord> {
+  return request("/api/evernote/import", {
+    method: "POST",
+    body: JSON.stringify({ note_guid: guid, client_name: clientName }),
+  });
+}
+
+export async function listEvernoteImports(): Promise<EvernoteImportRecord[]> {
+  return request("/api/evernote/imports");
+}
+
+export async function getEvernoteImport(id: string): Promise<EvernoteImportRecord> {
+  return request(`/api/evernote/imports/${id}`);
+}
+
+// ── Curated Shares ──────────────────────────────────────────────
+
+export async function createCuratedShare(label: string, productIds: string[], expiresAt?: string): Promise<CuratedShare> {
+  return request("/api/shares", {
+    method: "POST",
+    body: JSON.stringify({ label, product_ids: productIds, expires_at: expiresAt }),
+  });
+}
+
+export async function listCuratedShares(): Promise<CuratedShare[]> {
+  return request("/api/shares");
+}
+
+export async function updateCuratedShare(id: string, data: Partial<CuratedShare>): Promise<CuratedShare> {
+  return request(`/api/shares/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCuratedShare(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/shares/${id}`, { method: "DELETE" });
+}
+
+export async function validateCuratedShare(token: string): Promise<{ valid: boolean; label: string; product_count: number }> {
+  return request(`/api/shares/validate/${token}`);
+}
+
+export async function getCuratedShareProducts(token: string): Promise<ProductDetail[]> {
+  return request(`/api/shares/${token}/products`);
+}
+
+export function getCuratedSharePdfUrl(token: string, productId: string): string {
+  return `${API}/api/shares/${token}/products/${productId}/pdf`;
+}
+
+// ── Product Photos ──────────────────────────────────────────────
+
+export function getProductPhotoUrl(productId: string, photoId: string): string {
+  return `${API}/api/admin/products/${productId}/photos/${photoId}`;
 }

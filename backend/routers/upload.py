@@ -3,7 +3,7 @@
 import logging
 import shutil
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from backend.config import settings
@@ -18,12 +18,13 @@ router = APIRouter(prefix="/api", tags=["upload"])
 @router.post("/upload", response_model=JobResponse)
 async def upload_coa(
     file: UploadFile = File(...),
+    client_name: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Upload a CoA PDF for processing.
 
     Saves the file, creates a job record, and starts processing in a background thread.
-    In production, this would use Celery; for Phase 1 we use threading.
+    Optionally accepts a client_name to pre-assign the product to a client.
     """
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
@@ -38,7 +39,7 @@ async def upload_coa(
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     # Create job record
-    job = CoAJob(filename=file.filename)
+    job = CoAJob(filename=file.filename, client_name=client_name or None)
     db.add(job)
     db.commit()
     db.refresh(job)

@@ -1,10 +1,13 @@
 """Admin router — login, stats, job management."""
 
 import logging
+import os
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.auth import create_access_token, get_admin_user, verify_credentials
@@ -12,15 +15,21 @@ from backend.config import settings
 from backend.database import get_db
 from backend.models import (
     AdminLogin,
+    ClientProductResponse,
+    ClientSummary,
     CoAJob,
     DashboardStats,
     JobResponse,
     JobStatus,
     Product,
     ProductDetailResponse,
+    ProductPhoto,
+    ProductPhotoResponse,
     ProductStatus,
     ProductUpdate,
     RedactionRegion,
+    SyncLog,
+    SyncLogResponse,
     AccessToken,
 )
 from backend.tasks.dispatch import send_process_coa
@@ -200,4 +209,135 @@ def get_stats(
         total_products=len(products),
         products_published=published_count,
         total_tokens=token_count,
+    )
+
+
+# ── Client Records ────────────────────────────────────────────────
+
+
+def _get_pdf_metadata(product: Product) -> tuple[str | None, int, int]:
+    """Return (filename, file_size, page_count) for a product's published PDF."""
+    pub_dir = settings.published_path / product.id
+    if not pub_dir.exists():
+        return None, 0, 0
+    pdf_files = list(pub_dir.glob("*.pdf"))
+    if not pdf_files:
+        return None, 0, 0
+    pdf_path = pdf_files[0]
+    file_size = os.path.getsize(pdf_path)
+    # Get page count from the CoA job
+    page_count = 0
+    if product.job:
+        page_count = product.job.page_count
+    return pdf_path.name, file_size, page_count
+
+
+@router.get("/api/admin/clients", response_model=list[ClientSummary])
+def list_clients(
+    q: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _admin: str = Depends(get_admin_user),
+):
+    """List unique clients with product counts."""
+    query = (
+        db.query(
+            Product.client_name,
+            func.count(Product.id).label("product_count"),
+            func.max(Product.test_date).label("latest_test_date"),
+        )
+        .filter(Product.client_name.isnot(None), Product.client_name != "")
+        .group_by(Product.client_name)
+    )
+
+    if q:
+        query = query.filter(Product.client_name.ilike(f"%{q}%"))
+
+    rows = query.order_by(Product.client_name).all()
+
+    result = []
+    for client_name, product_count, latest_test_date in rows:
+        # Get distinct tiers for this client
+        tiers = (
+            db.query(Product.tier)
+            .filter(Product.client_name == client_name)
+            .distinct()
+            .all()
+        )
+        result.append(
+            ClientSummary(
+                client_name=client_name,
+                product_count=product_count,
+                latest_test_date=latest_test_date,
+                tiers=[t[0] for t in tiers],
+            )
+        )
+    return result
+
+
+@router.get("/api/admin/clients/{client_name}/products", response_model=list[ClientProductResponse])
+def list_client_products(
+    client_name: str,
+    db: Session = Depends(get_db),
+    _admin: str = Depends(get_admin_user),
+):
+    """List products for a specific client with PDF metadata."""
+    products = (
+        db.query(Product)
+        .filter(Product.client_name == client_name)
+        .order_by(Product.test_date.desc().nullslast(), Product.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for p in products:
+        pdf_filename, pdf_file_size, pdf_page_count = _get_pdf_metadata(p)
+
+        syncs = db.query(SyncLog).filter(SyncLog.product_id == p.id).all()
+        photos = db.query(ProductPhoto).filter(ProductPhoto.product_id == p.id).all()
+
+        result.append(
+            ClientProductResponse(
+                id=p.id,
+                name=p.name,
+                strain_type=p.strain_type,
+                lot_number=p.lot_number,
+                lab=p.lab,
+                test_date=p.test_date,
+                tier=p.tier,
+                status=p.status,
+                pdf_filename=pdf_filename,
+                pdf_page_count=pdf_page_count,
+                pdf_file_size=pdf_file_size,
+                job_id=p.job.id if p.job else None,
+                syncs=[SyncLogResponse.model_validate(s) for s in syncs],
+                photos=[ProductPhotoResponse.model_validate(ph) for ph in photos],
+            )
+        )
+    return result
+
+
+@router.get("/api/admin/products/{product_id}/photos/{photo_id}")
+def serve_product_photo(
+    product_id: str,
+    photo_id: str,
+    db: Session = Depends(get_db),
+    _admin: str = Depends(get_admin_user),
+):
+    """Serve a product photo file."""
+    photo = (
+        db.query(ProductPhoto)
+        .filter(ProductPhoto.id == photo_id, ProductPhoto.product_id == product_id)
+        .first()
+    )
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    photo_path = Path(photo.stored_filename)
+    if not photo_path.exists():
+        raise HTTPException(status_code=404, detail="Photo file not found on disk")
+
+    return FileResponse(
+        path=photo_path,
+        media_type=photo.mime_type,
+        filename=photo.original_filename,
     )

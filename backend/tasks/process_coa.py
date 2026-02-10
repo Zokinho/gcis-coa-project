@@ -103,6 +103,11 @@ def process_coa(self, job_id: str) -> None:
         logger.info("[%s] Step 7: Publishing product record", job.id)
         product = publish_product(db, job, merged, tags, redacted_pdf_path)
 
+        # Copy client_name from job if set (upload with client or Evernote import)
+        if job.client_name and not product.client_name:
+            product.client_name = job.client_name
+            db.commit()
+
         logger.info("[%s] Pipeline complete — product %s (%s)", job.id, product.name, product.id)
 
         # Dispatch admin notification

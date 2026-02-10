@@ -116,5 +116,11 @@ class Settings(BaseSettings):
         p.mkdir(parents=True, exist_ok=True)
         return p
 
+    @property
+    def evernote_imports_path(self) -> Path:
+        p = self.storage_path / "evernote_imports"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
 
 settings = Settings()

@@ -14,6 +14,8 @@ from backend.models import (
     JobStatus,
     Product,
     ProductTestData,
+    SyncLog,
+    SyncTarget,
 )
 from backend.services.evernote_service import preview_evernote_push, push_to_evernote
 
@@ -87,6 +89,17 @@ async def evernote_push(
 
     try:
         result = push_to_evernote(product, test_data, client_name)
+
+        sync_log = SyncLog(
+            product_id=product.id,
+            target=SyncTarget.evernote,
+            external_id=result["note_guid"],
+            external_url=result["note_url"],
+            extra={"note_title": result["note_title"]},
+        )
+        db.add(sync_log)
+        db.commit()
+
         return result
     except Exception as exc:
         logger.exception("Evernote push failed")

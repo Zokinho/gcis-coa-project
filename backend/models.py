@@ -44,6 +44,19 @@ class EmailIngestionStatus(str, enum.Enum):
     error = "error"
 
 
+class SyncTarget(str, enum.Enum):
+    evernote = "evernote"
+    sharepoint = "sharepoint"
+    zoho = "zoho"
+
+
+class EvernoteImportStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    completed = "completed"
+    error = "error"
+
+
 class AttachmentType(str, enum.Enum):
     coa_pdf = "coa_pdf"
     coa_photo = "coa_photo"
@@ -102,6 +115,8 @@ class CoAJob(Base):
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     product_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("products.id"), nullable=True)
     email_ingestion_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("email_ingestions.id"), nullable=True)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evernote_import_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("evernote_imports.id"), nullable=True)
 
     product: Mapped["Product | None"] = relationship(back_populates="job")
     redaction_regions: Mapped[list["RedactionRegion"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -129,6 +144,8 @@ class Product(Base):
 
     job: Mapped["CoAJob | None"] = relationship(back_populates="product")
     test_data: Mapped[list["ProductTestData"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    sync_logs: Mapped[list["SyncLog"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    photos: Mapped[list["ProductPhoto"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
 
 class ProductTestData(Base):
@@ -180,6 +197,66 @@ class NotificationLog(Base):
     success: Mapped[bool] = mapped_column(Boolean, default=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SyncLog(Base):
+    __tablename__ = "sync_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    product_id: Mapped[str] = mapped_column(String(36), ForeignKey("products.id"))
+    target: Mapped[SyncTarget] = mapped_column(Enum(SyncTarget))
+    external_id: Mapped[str] = mapped_column(String(512), default="")
+    external_url: Mapped[str] = mapped_column(String(1024), default="")
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped["Product"] = relationship(back_populates="sync_logs")
+
+
+class ProductPhoto(Base):
+    __tablename__ = "product_photos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    product_id: Mapped[str] = mapped_column(String(36), ForeignKey("products.id"))
+    original_filename: Mapped[str] = mapped_column(String(512))
+    stored_filename: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(100), default="image/jpeg")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(50), default="upload")  # evernote/email/upload
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped["Product"] = relationship(back_populates="photos")
+
+
+class EvernoteImport(Base):
+    __tablename__ = "evernote_imports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    note_guid: Mapped[str] = mapped_column(String(255), index=True)
+    note_title: Mapped[str] = mapped_column(String(1024), default="")
+    client_name: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[EvernoteImportStatus] = mapped_column(Enum(EvernoteImportStatus), default=EvernoteImportStatus.pending)
+    pdfs_found: Mapped[int] = mapped_column(Integer, default=0)
+    photos_found: Mapped[int] = mapped_column(Integer, default=0)
+    pdfs_imported: Mapped[int] = mapped_column(Integer, default=0)
+    photos_imported: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CuratedShare(Base):
+    __tablename__ = "curated_shares"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(255))
+    product_ids: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_used: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    use_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class AccessToken(Base):
@@ -420,3 +497,146 @@ class EvernotePushResult(BaseModel):
     note_guid: str
     note_title: str
     note_url: str
+
+
+# ── Sync & Photo Schemas ─────────────────────────────────────────
+
+
+class SyncLogResponse(BaseModel):
+    id: str
+    product_id: str
+    target: SyncTarget
+    external_id: str
+    external_url: str
+    extra: dict = {}
+    synced_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProductPhotoResponse(BaseModel):
+    id: str
+    product_id: str
+    original_filename: str
+    stored_filename: str
+    mime_type: str
+    file_size: int
+    source: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Evernote Import Schemas ──────────────────────────────────────
+
+
+class EvernoteNoteListItem(BaseModel):
+    guid: str
+    title: str
+    updated: datetime | None = None
+    resource_count: int = 0
+    already_imported: bool = False
+
+
+class EvernoteNoteResource(BaseModel):
+    guid: str
+    filename: str
+    mime: str
+    size: int
+    is_pdf: bool
+    is_image: bool
+
+
+class EvernoteNotePreview(BaseModel):
+    guid: str
+    title: str
+    client_name: str
+    resources: list[EvernoteNoteResource] = []
+    pdf_count: int = 0
+    photo_count: int = 0
+
+
+class EvernoteImportRequest(BaseModel):
+    note_guid: str
+    client_name: str | None = None
+
+
+class EvernoteImportResponse(BaseModel):
+    id: str
+    note_guid: str
+    note_title: str
+    client_name: str
+    status: EvernoteImportStatus
+    pdfs_found: int = 0
+    photos_found: int = 0
+    pdfs_imported: int = 0
+    photos_imported: int = 0
+    error_message: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Curated Share Schemas ────────────────────────────────────────
+
+
+class CuratedShareCreate(BaseModel):
+    label: str
+    product_ids: list[str]
+    expires_at: datetime | None = None
+
+
+class CuratedShareResponse(BaseModel):
+    id: str
+    token: str
+    label: str
+    product_ids: list[str] = []
+    active: bool
+    expires_at: datetime | None = None
+    created_at: datetime
+    last_used: datetime | None = None
+    use_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class CuratedShareUpdate(BaseModel):
+    label: str | None = None
+    product_ids: list[str] | None = None
+    active: bool | None = None
+    expires_at: datetime | None = None
+
+
+# ── Client Records Schemas ───────────────────────────────────────
+
+
+class ClientSummary(BaseModel):
+    client_name: str
+    product_count: int
+    latest_test_date: date | None = None
+    tiers: list[str] = []
+
+
+class ClientProductResponse(BaseModel):
+    id: str
+    name: str
+    strain_type: str | None = None
+    lot_number: str
+    lab: str
+    test_date: date | None = None
+    tier: str
+    status: ProductStatus
+    pdf_filename: str | None = None
+    pdf_page_count: int = 0
+    pdf_file_size: int = 0
+    job_id: str | None = None
+    syncs: list[SyncLogResponse] = []
+    photos: list[ProductPhotoResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class PdfInfoResponse(BaseModel):
+    filename: str
+    file_size: int
+    page_count: int
