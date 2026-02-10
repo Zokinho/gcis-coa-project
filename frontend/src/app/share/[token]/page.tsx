@@ -77,8 +77,10 @@ export default function ShareCatalogPage({
             for (const td of product.test_data) {
               if (td.test_type === "potency" && td.data) {
                 const d = td.data as Record<string, unknown>;
-                thc = String(d.thc_total ?? d.THC_total ?? d.thc ?? "");
-                cbd = String(d.cbd_total ?? d.CBD_total ?? d.cbd ?? "");
+                const thcVal = d.total_thc_pct ?? d.thc_total ?? d.THC_total ?? d.thc;
+                const cbdVal = d.total_cbd_pct ?? d.cbd_total ?? d.CBD_total ?? d.cbd;
+                if (thcVal != null && thcVal !== "") thc = String(thcVal);
+                if (cbdVal != null && cbdVal !== "") cbd = String(cbdVal);
               }
             }
 

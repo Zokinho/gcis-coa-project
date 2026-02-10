@@ -8,6 +8,7 @@ import {
   getProductPdfInfo,
 } from "@/lib/api";
 import type { ProductDetail, ProductTestData, PdfInfo } from "@/lib/types";
+import { normalizeTestResults } from "@/lib/types";
 import CollapsiblePdf from "@/components/CollapsiblePdf";
 import TerpeneBar from "@/components/TerpeneBar";
 
@@ -25,7 +26,7 @@ interface ResultRow {
 }
 
 function TestDataTable({ testData }: { testData: ProductTestData }) {
-  const results = (testData.data.results ?? []) as ResultRow[];
+  const results = normalizeTestResults(testData.data as Record<string, unknown>) as ResultRow[];
   if (results.length === 0) return <p className="text-sm text-gray-400">No results data.</p>;
 
   return (

@@ -1,6 +1,7 @@
 """Products router — public product catalog for buyers."""
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,8 @@ from backend.config import settings
 from backend.database import get_db
 from backend.models import (
     AccessToken,
+    CoAJob,
+    PdfInfoResponse,
     Product,
     ProductDetailResponse,
     ProductResponse,
@@ -124,4 +127,47 @@ def get_product_pdf(
         pdf_files[0],
         media_type="application/pdf",
         filename=pdf_files[0].name,
+    )
+
+
+@router.get("/{product_id}/pdf-info", response_model=PdfInfoResponse)
+def get_product_pdf_info(
+    product_id: str,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Return PDF metadata (filename, file_size, page_count) without downloading."""
+    allowed_tiers = _validate_buyer_token(token, db)
+
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if product.status != ProductStatus.published:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if allowed_tiers and product.tier not in allowed_tiers:
+        raise HTTPException(status_code=403, detail="Access denied for this product tier")
+
+    pub_dir = settings.published_path / product.id
+    if not pub_dir.exists():
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    pdf_files = list(pub_dir.glob("*.pdf"))
+    if not pdf_files:
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    pdf_path = pdf_files[0]
+    file_size = os.path.getsize(pdf_path)
+
+    # Get page count from CoA job
+    page_count = 0
+    job = db.query(CoAJob).filter(CoAJob.product_id == product_id).first()
+    if job:
+        page_count = job.page_count
+
+    return PdfInfoResponse(
+        filename=pdf_path.name,
+        file_size=file_size,
+        page_count=page_count,
     )

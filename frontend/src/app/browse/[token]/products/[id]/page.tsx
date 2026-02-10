@@ -2,9 +2,11 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { getProduct, getProductPdfUrl } from "@/lib/api";
-import type { ProductDetail, ProductTestData } from "@/lib/types";
+import { getProduct, getProductPdfUrl, getProductPdfInfo } from "@/lib/api";
+import type { ProductDetail, ProductTestData, PdfInfo } from "@/lib/types";
+import { normalizeTestResults } from "@/lib/types";
 import TerpeneBar from "@/components/TerpeneBar";
+import CollapsiblePdf from "@/components/CollapsiblePdf";
 
 const tierColors: Record<string, string> = {
   gold: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -20,7 +22,7 @@ interface ResultRow {
 }
 
 function TestDataTable({ testData }: { testData: ProductTestData }) {
-  const results = (testData.data.results ?? []) as ResultRow[];
+  const results = normalizeTestResults(testData.data as Record<string, unknown>) as ResultRow[];
 
   if (results.length === 0) {
     return <p className="text-sm text-gray-400">No results data.</p>;
@@ -114,12 +116,19 @@ export default function ProductDetailPage({
   const { token, id } = use(params);
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getProduct(id, token)
-      .then(setProduct)
+    Promise.all([
+      getProduct(id, token),
+      getProductPdfInfo(id, token).catch(() => null),
+    ])
+      .then(([prod, info]) => {
+        setProduct(prod);
+        setPdfInfo(info);
+      })
       .catch((err) => setError(err.message || "Failed to load product."))
       .finally(() => setLoading(false));
   }, [id, token]);
@@ -238,30 +247,39 @@ export default function ProductDetailPage({
           )}
         </div>
 
-        {/* Download PDF */}
-        <div>
-          <a
-            href={getProductPdfUrl(product.id, token)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {/* PDF Viewer */}
+        {pdfInfo ? (
+          <CollapsiblePdf
+            pdfUrl={getProductPdfUrl(product.id, token)}
+            filename={pdfInfo.filename}
+            fileSize={pdfInfo.file_size}
+            pageCount={pdfInfo.page_count}
+          />
+        ) : (
+          <div>
+            <a
+              href={getProductPdfUrl(product.id, token)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"
-              />
-            </svg>
-            Download PDF
-          </a>
-        </div>
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"
+                />
+              </svg>
+              Download PDF
+            </a>
+          </div>
+        )}
 
         {/* Test data sections */}
         {product.test_data.length > 0 ? (

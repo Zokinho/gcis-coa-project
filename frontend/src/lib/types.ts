@@ -251,6 +251,72 @@ export interface PdfInfo {
   page_count: number;
 }
 
+/**
+ * Normalize test data from the extractor's varied shapes into a uniform array.
+ * Handles: potency (cannabinoids), terpenes (individual_terpenes),
+ * microbial (tests), pesticides (individual_pesticides),
+ * heavy_metals/residual_solvents/mycotoxins (analytes),
+ * and the legacy flat `results` array.
+ */
+export function normalizeTestResults(
+  data: Record<string, unknown>,
+): { analyte: string; value: string | number; unit?: string; status?: string }[] {
+  // Legacy format
+  if (Array.isArray(data.results) && data.results.length > 0) {
+    return data.results;
+  }
+
+  // Potency: cannabinoids[] with {name, value, unit}
+  if (Array.isArray(data.cannabinoids)) {
+    return (data.cannabinoids as { name: string; value: unknown; unit?: string }[]).map((c) => ({
+      analyte: c.name,
+      value: String(c.value ?? ""),
+      unit: c.unit,
+    }));
+  }
+
+  // Terpenes: individual_terpenes[] with {name, value, unit}
+  if (Array.isArray(data.individual_terpenes)) {
+    return (data.individual_terpenes as { name: string; value: unknown; unit?: string }[]).map((t) => ({
+      analyte: t.name,
+      value: typeof t.value === "number" ? t.value : String(t.value ?? ""),
+      unit: t.unit,
+    }));
+  }
+
+  // Pesticides: individual_pesticides[] with {analyte, result, limit, unit, status}
+  if (Array.isArray(data.individual_pesticides)) {
+    return (data.individual_pesticides as { analyte: string; result: unknown; unit?: string; status?: string }[]).map((p) => ({
+      analyte: p.analyte,
+      value: String(p.result ?? ""),
+      unit: p.unit,
+      status: p.status ?? undefined,
+    }));
+  }
+
+  // Microbial: tests[] with {analyte, result, limit, unit, status}
+  if (Array.isArray(data.tests)) {
+    return (data.tests as { analyte: string; result: unknown; unit?: string; status?: string }[]).map((t) => ({
+      analyte: t.analyte,
+      value: String(t.result ?? ""),
+      unit: t.unit,
+      status: t.status ?? undefined,
+    }));
+  }
+
+  // Heavy metals, residual solvents, mycotoxins: analytes[] with {analyte, result, unit, status}
+  if (Array.isArray(data.analytes)) {
+    return (data.analytes as { analyte: string; result: unknown; unit?: string; status?: string }[]).map((a) => ({
+      analyte: a.analyte,
+      value: String(a.result ?? ""),
+      unit: a.unit,
+      status: a.status ?? undefined,
+    }));
+  }
+
+  return [];
+}
+
 export interface DashboardStats {
   total_jobs: number;
   queued: number;

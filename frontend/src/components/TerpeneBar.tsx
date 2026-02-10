@@ -1,10 +1,6 @@
 "use client";
 
-interface TerpeneResult {
-  analyte: string;
-  value: number | string;
-  unit?: string;
-}
+import { normalizeTestResults } from "@/lib/types";
 
 const barColors = [
   "bg-emerald-500",
@@ -19,10 +15,10 @@ export default function TerpeneBar({
 }: {
   data: Record<string, unknown>;
 }) {
-  const results = (data.results ?? []) as TerpeneResult[];
+  const results = normalizeTestResults(data);
 
   const sorted = [...results]
-    .map((r) => ({ ...r, numVal: typeof r.value === "number" ? r.value : parseFloat(String(r.value)) || 0 }))
+    .map((r) => ({ analyte: r.analyte, unit: r.unit, numVal: typeof r.value === "number" ? r.value : parseFloat(String(r.value)) || 0 }))
     .filter((r) => r.numVal > 0)
     .sort((a, b) => b.numVal - a.numVal)
     .slice(0, 5);
