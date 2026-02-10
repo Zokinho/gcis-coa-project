@@ -123,6 +123,26 @@ class CoAJob(Base):
     email_attachment: Mapped["EmailAttachment | None"] = relationship(back_populates="job")
 
 
+class ProductGroup(Base):
+    __tablename__ = "product_groups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    normalized_name: Mapped[str] = mapped_column(String(255), index=True, default="")
+    strain_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    producer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    tier: Mapped[str] = mapped_column(String(50), default="gacp-small")
+    status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.draft)
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    tags: Mapped[dict | list] = mapped_column(JSON, default=list)
+    search_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    products: Mapped[list["Product"]] = relationship(back_populates="product_group", order_by="Product.created_at.desc()")
+
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -141,11 +161,14 @@ class Product(Base):
     client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     search_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    product_group_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("product_groups.id"), nullable=True, index=True)
+    is_latest: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     job: Mapped["CoAJob | None"] = relationship(back_populates="product")
     test_data: Mapped[list["ProductTestData"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     sync_logs: Mapped[list["SyncLog"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     photos: Mapped[list["ProductPhoto"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    product_group: Mapped["ProductGroup | None"] = relationship(back_populates="products")
 
 
 class ProductTestData(Base):
@@ -252,6 +275,7 @@ class CuratedShare(Base):
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     label: Mapped[str] = mapped_column(String(255))
     product_ids: Mapped[list] = mapped_column(JSON, default=list)
+    product_group_ids: Mapped[list] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -330,6 +354,8 @@ class ProductResponse(BaseModel):
     tags: list[str] = []
     client_name: str | None = None
     created_at: datetime
+    product_group_id: str | None = None
+    is_latest: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -361,6 +387,8 @@ class ProductDetailResponse(BaseModel):
     tags: list[str] = []
     client_name: str | None = None
     created_at: datetime
+    product_group_id: str | None = None
+    is_latest: bool = False
     test_data: list[ProductTestDataResponse] = []
 
     model_config = {"from_attributes": True}
@@ -406,6 +434,7 @@ class DashboardStats(BaseModel):
     total_products: int = 0
     products_published: int = 0
     total_tokens: int = 0
+    total_product_groups: int = 0
 
 
 class ProductUpdate(BaseModel):
@@ -413,6 +442,7 @@ class ProductUpdate(BaseModel):
     tier: str | None = None
     tags: list[str] | None = None
     available: bool | None = None
+    product_group_id: str | None = None
 
 
 class ExtractionResult(BaseModel):
@@ -582,7 +612,8 @@ class EvernoteImportResponse(BaseModel):
 
 class CuratedShareCreate(BaseModel):
     label: str
-    product_ids: list[str]
+    product_ids: list[str] = []
+    product_group_ids: list[str] = []
     expires_at: datetime | None = None
 
 
@@ -591,6 +622,7 @@ class CuratedShareResponse(BaseModel):
     token: str
     label: str
     product_ids: list[str] = []
+    product_group_ids: list[str] = []
     active: bool
     expires_at: datetime | None = None
     created_at: datetime
@@ -603,6 +635,7 @@ class CuratedShareResponse(BaseModel):
 class CuratedShareUpdate(BaseModel):
     label: str | None = None
     product_ids: list[str] | None = None
+    product_group_ids: list[str] | None = None
     active: bool | None = None
     expires_at: datetime | None = None
 
@@ -632,6 +665,8 @@ class ClientProductResponse(BaseModel):
     job_id: str | None = None
     syncs: list[SyncLogResponse] = []
     photos: list[ProductPhotoResponse] = []
+    product_group_id: str | None = None
+    product_group_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -640,3 +675,58 @@ class PdfInfoResponse(BaseModel):
     filename: str
     file_size: int
     page_count: int
+
+
+# ── Product Group Schemas ───────────────────────────────────────
+
+
+class CoAHistoryItem(BaseModel):
+    product_id: str
+    lot_number: str
+    lab: str
+    test_date: date | None = None
+    report_number: str | None = None
+    is_latest: bool = False
+    created_at: datetime
+
+
+class ProductGroupResponse(BaseModel):
+    id: str
+    name: str
+    strain_type: str | None = None
+    producer: str | None = None
+    client_name: str | None = None
+    tier: str
+    status: ProductStatus
+    available: bool
+    tags: list[str] = []
+    created_at: datetime
+    updated_at: datetime
+    coa_count: int = 0
+    latest_product: ProductResponse | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ProductGroupDetailResponse(ProductGroupResponse):
+    products: list[ProductResponse] = []
+    coa_history: list[CoAHistoryItem] = []
+
+
+class ProductGroupCreate(BaseModel):
+    name: str
+    strain_type: str | None = None
+    producer: str | None = None
+    client_name: str | None = None
+    tier: str = "gacp-small"
+    tags: list[str] = []
+
+
+class ProductGroupUpdate(BaseModel):
+    name: str | None = None
+    strain_type: str | None = None
+    producer: str | None = None
+    client_name: str | None = None
+    tier: str | None = None
+    tags: list[str] | None = None
+    available: bool | None = None

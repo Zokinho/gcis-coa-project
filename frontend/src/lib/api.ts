@@ -59,6 +59,8 @@ import type {
   EvernoteNoteDetail,
   EvernoteImportRecord,
   CuratedShare,
+  ProductGroup,
+  ProductGroupDetail,
 } from "./types";
 
 export async function listJobs(): Promise<Job[]> {
@@ -337,10 +339,20 @@ export async function getEvernoteImport(id: string): Promise<EvernoteImportRecor
 
 // ── Curated Shares ──────────────────────────────────────────────
 
-export async function createCuratedShare(label: string, productIds: string[], expiresAt?: string): Promise<CuratedShare> {
+export async function createCuratedShare(
+  label: string,
+  productIds: string[],
+  expiresAt?: string,
+  productGroupIds?: string[],
+): Promise<CuratedShare> {
   return request("/api/shares", {
     method: "POST",
-    body: JSON.stringify({ label, product_ids: productIds, expires_at: expiresAt }),
+    body: JSON.stringify({
+      label,
+      product_ids: productIds,
+      product_group_ids: productGroupIds || [],
+      expires_at: expiresAt,
+    }),
   });
 }
 
@@ -375,4 +387,64 @@ export function getCuratedSharePdfUrl(token: string, productId: string): string 
 
 export function getProductPhotoUrl(productId: string, photoId: string): string {
   return `${API}/api/admin/products/${productId}/photos/${photoId}`;
+}
+
+// ── Product Groups (Buyer) ─────────────────────────────────────
+
+export async function listProductGroups(params?: {
+  q?: string;
+  tier?: string;
+  tag?: string;
+  page?: number;
+  per_page?: number;
+  token?: string;
+}): Promise<ProductGroup[]> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.tier) qs.set("tier", params.tier);
+  if (params?.tag) qs.set("tag", params.tag);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.per_page) qs.set("per_page", String(params.per_page));
+  if (params?.token) qs.set("token", params.token);
+  return request(`/api/product-groups?${qs.toString()}`);
+}
+
+export async function getProductGroup(id: string, token?: string): Promise<ProductGroupDetail> {
+  const qs = token ? `?token=${token}` : "";
+  return request(`/api/product-groups/${id}${qs}`);
+}
+
+export function getProductGroupCoaPdfUrl(groupId: string, productId: string, token?: string): string {
+  const qs = token ? `?token=${token}` : "";
+  return `${API}/api/product-groups/${groupId}/coas/${productId}/pdf${qs}`;
+}
+
+// ── Product Groups (Admin) ─────────────────────────────────────
+
+export async function listAdminProductGroups(q?: string): Promise<ProductGroup[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  return request(`/api/admin/product-groups${qs}`);
+}
+
+export async function getAdminProductGroup(id: string): Promise<ProductGroupDetail> {
+  return request(`/api/admin/product-groups/${id}`);
+}
+
+export async function updateProductGroup(id: string, data: Partial<ProductGroup>): Promise<ProductGroup> {
+  return request(`/api/admin/product-groups/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function reassignProduct(groupId: string, productId: string): Promise<{ ok: boolean }> {
+  return request(`/api/admin/product-groups/${groupId}/reassign?product_id=${productId}`, {
+    method: "POST",
+  });
+}
+
+export async function setLatestCoA(groupId: string, productId: string): Promise<{ ok: boolean }> {
+  return request(`/api/admin/product-groups/${groupId}/set-latest?product_id=${productId}`, {
+    method: "POST",
+  });
 }

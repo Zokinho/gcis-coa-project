@@ -19,6 +19,7 @@ from backend.models import (
     CuratedShareUpdate,
     Product,
     ProductDetailResponse,
+    ProductGroup,
     ProductStatus,
     ProductTestData,
     ProductTestDataResponse,
@@ -42,6 +43,7 @@ async def create_share(
         token=secrets.token_urlsafe(32),
         label=body.label,
         product_ids=body.product_ids,
+        product_group_ids=body.product_group_ids,
         expires_at=body.expires_at,
     )
     db.add(share)
@@ -76,6 +78,8 @@ async def update_share(
         share.label = body.label
     if body.product_ids is not None:
         share.product_ids = body.product_ids
+    if body.product_group_ids is not None:
+        share.product_group_ids = body.product_group_ids
     if body.active is not None:
         share.active = body.active
     if body.expires_at is not None:
@@ -134,6 +138,7 @@ async def validate_share(
         "valid": True,
         "label": share.label,
         "product_count": len(share.product_ids),
+        "product_group_count": len(share.product_group_ids or []),
     }
 
 
@@ -142,20 +147,47 @@ async def get_share_products(
     token: str,
     db: Session = Depends(get_db),
 ):
-    """Get products in a curated share (public)."""
+    """Get products in a curated share (public).
+
+    If product_group_ids is populated, resolve to latest product per group.
+    Falls back to product_ids for backward compatibility.
+    """
     share = _validate_share(token, db)
 
-    products = (
-        db.query(Product)
-        .filter(
-            Product.id.in_(share.product_ids),
-            Product.status == ProductStatus.published,
+    product_list: list[Product] = []
+
+    # Resolve product_group_ids to latest products
+    if share.product_group_ids:
+        for gid in share.product_group_ids:
+            latest = (
+                db.query(Product)
+                .filter(
+                    Product.product_group_id == gid,
+                    Product.is_latest == True,
+                    Product.status == ProductStatus.published,
+                )
+                .first()
+            )
+            if latest:
+                product_list.append(latest)
+
+    # Also include any direct product_ids (backward compat)
+    if share.product_ids:
+        already = {p.id for p in product_list}
+        direct = (
+            db.query(Product)
+            .filter(
+                Product.id.in_(share.product_ids),
+                Product.status == ProductStatus.published,
+            )
+            .all()
         )
-        .all()
-    )
+        for p in direct:
+            if p.id not in already:
+                product_list.append(p)
 
     result = []
-    for p in products:
+    for p in product_list:
         test_data = db.query(ProductTestData).filter(ProductTestData.product_id == p.id).all()
         result.append(
             ProductDetailResponse(
@@ -173,6 +205,8 @@ async def get_share_products(
                 tags=p.tags or [],
                 client_name=p.client_name,
                 created_at=p.created_at,
+                product_group_id=p.product_group_id,
+                is_latest=p.is_latest,
                 test_data=[ProductTestDataResponse.model_validate(td) for td in test_data],
             )
         )
@@ -188,12 +222,14 @@ async def get_share_product_pdf(
     """Serve PDF for a product in a curated share (public)."""
     share = _validate_share(token, db)
 
-    if product_id not in share.product_ids:
-        raise HTTPException(status_code=403, detail="Product not in this share")
-
+    # Check direct product_ids OR product belongs to a shared group
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product or product.status != ProductStatus.published:
         raise HTTPException(status_code=404, detail="Product not found")
+    in_direct = product_id in (share.product_ids or [])
+    in_group = product.product_group_id and product.product_group_id in (share.product_group_ids or [])
+    if not in_direct and not in_group:
+        raise HTTPException(status_code=403, detail="Product not in this share")
 
     pub_dir = settings.published_path / product.id
     pdfs = list(pub_dir.glob("*.pdf"))

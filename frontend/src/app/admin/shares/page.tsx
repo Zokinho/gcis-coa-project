@@ -5,9 +5,9 @@ import {
   listCuratedShares,
   createCuratedShare,
   deleteCuratedShare,
-  listProducts,
+  listAdminProductGroups,
 } from "@/lib/api";
-import type { CuratedShare, Product } from "@/lib/types";
+import type { CuratedShare, ProductGroup } from "@/lib/types";
 
 export default function SharesPage() {
   const [shares, setShares] = useState<CuratedShare[]>([]);
@@ -68,6 +68,9 @@ export default function SharesPage() {
           {shares.map((share) => {
             const expired =
               share.expires_at && new Date(share.expires_at) < new Date();
+            const groupCount = share.product_group_ids?.length || 0;
+            const productCount = share.product_ids?.length || 0;
+            const totalItems = groupCount || productCount;
 
             return (
               <div
@@ -79,7 +82,9 @@ export default function SharesPage() {
                     {share.label}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {share.product_ids.length} product{share.product_ids.length !== 1 ? "s" : ""}
+                    {groupCount > 0
+                      ? `${groupCount} product group${groupCount !== 1 ? "s" : ""}`
+                      : `${productCount} product${productCount !== 1 ? "s" : ""}`}
                     {" · "}Created {new Date(share.created_at).toLocaleDateString()}
                     {share.expires_at && (
                       <>
@@ -148,32 +153,29 @@ function CreateShareModal({
   onCreated: () => void;
 }) {
   const [label, setLabel] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productSearch, setProductSearch] = useState("");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const [groupSearch, setGroupSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
 
   useEffect(() => {
-    listProducts({ per_page: 200 })
-      .then((data) => {
-        // Only show published products
-        setProducts(data.filter((p) => p.status === "published"));
-      })
+    listAdminProductGroups()
+      .then(setGroups)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = products.filter(
-    (p) =>
-      !productSearch ||
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (p.client_name && p.client_name.toLowerCase().includes(productSearch.toLowerCase()))
+  const filtered = groups.filter(
+    (g) =>
+      !groupSearch ||
+      g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+      (g.client_name && g.client_name.toLowerCase().includes(groupSearch.toLowerCase()))
   );
 
-  function toggleProduct(id: string) {
-    setSelectedIds((prev) => {
+  function toggleGroup(id: string) {
+    setSelectedGroupIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -182,13 +184,14 @@ function CreateShareModal({
   }
 
   async function handleCreate() {
-    if (!label.trim() || selectedIds.size === 0) return;
+    if (!label.trim() || selectedGroupIds.size === 0) return;
     setCreating(true);
     try {
       await createCuratedShare(
         label.trim(),
-        Array.from(selectedIds),
+        [],
         expiresAt || undefined,
+        Array.from(selectedGroupIds),
       );
       onCreated();
       onClose();
@@ -239,35 +242,36 @@ function CreateShareModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Products ({selectedIds.size} selected)
+              Select Product Groups ({selectedGroupIds.size} selected)
             </label>
             <input
               type="text"
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="Search products..."
+              value={groupSearch}
+              onChange={(e) => setGroupSearch(e.target.value)}
+              placeholder="Search product groups..."
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {loading ? (
-              <p className="text-gray-500 text-sm py-4 text-center">Loading products...</p>
+              <p className="text-gray-500 text-sm py-4 text-center">Loading product groups...</p>
             ) : (
               <div className="border border-gray-200 rounded-lg max-h-60 overflow-auto divide-y divide-gray-100">
-                {filtered.map((p) => (
+                {filtered.map((g) => (
                   <label
-                    key={p.id}
+                    key={g.id}
                     className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
                   >
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(p.id)}
-                      onChange={() => toggleProduct(p.id)}
+                      checked={selectedGroupIds.has(g.id)}
+                      onChange={() => toggleGroup(g.id)}
                       className="rounded"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 truncate">{p.name}</p>
+                      <p className="text-sm text-gray-900 truncate">{g.name}</p>
                       <p className="text-xs text-gray-500">
-                        {p.client_name && `${p.client_name} · `}
-                        {p.lot_number} · {p.lab}
+                        {g.client_name && `${g.client_name} · `}
+                        {g.coa_count} CoA{g.coa_count !== 1 ? "s" : ""}
+                        {g.latest_product?.test_date && ` · Latest: ${g.latest_product.test_date}`}
                       </p>
                     </div>
                   </label>
@@ -283,7 +287,7 @@ function CreateShareModal({
           </button>
           <button
             onClick={handleCreate}
-            disabled={creating || !label.trim() || selectedIds.size === 0}
+            disabled={creating || !label.trim() || selectedGroupIds.size === 0}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
           >
             {creating ? "Creating..." : "Create Share"}

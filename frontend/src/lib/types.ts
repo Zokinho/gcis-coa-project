@@ -40,6 +40,8 @@ export interface Product {
   tags: string[];
   client_name: string | null;
   created_at: string;
+  product_group_id: string | null;
+  is_latest: boolean;
 }
 
 export interface ProductTestData {
@@ -212,6 +214,7 @@ export interface CuratedShare {
   token: string;
   label: string;
   product_ids: string[];
+  product_group_ids: string[];
   active: boolean;
   expires_at: string | null;
   created_at: string;
@@ -243,6 +246,8 @@ export interface ClientProduct {
   job_id: string | null;
   syncs: SyncLog[];
   photos: ProductPhoto[];
+  product_group_id: string | null;
+  product_group_name: string | null;
 }
 
 export interface PdfInfo {
@@ -328,4 +333,38 @@ export interface DashboardStats {
   total_products: number;
   products_published: number;
   total_tokens: number;
+  total_product_groups: number;
+}
+
+// ── Product Groups ──────────────────────────────────────────────
+
+export interface CoAHistoryItem {
+  product_id: string;
+  lot_number: string;
+  lab: string;
+  test_date: string | null;
+  report_number: string | null;
+  is_latest: boolean;
+  created_at: string;
+}
+
+export interface ProductGroup {
+  id: string;
+  name: string;
+  strain_type: string | null;
+  producer: string | null;
+  client_name: string | null;
+  tier: string;
+  status: ProductStatus;
+  available: boolean;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  coa_count: number;
+  latest_product: Product | null;
+}
+
+export interface ProductGroupDetail extends ProductGroup {
+  products: Product[];
+  coa_history: CoAHistoryItem[];
 }

@@ -2,8 +2,20 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { getProduct, getProductPdfUrl, getProductPdfInfo } from "@/lib/api";
-import type { ProductDetail, ProductTestData, PdfInfo } from "@/lib/types";
+import {
+  getProductGroup,
+  getProduct,
+  getProductPdfUrl,
+  getProductPdfInfo,
+  getProductGroupCoaPdfUrl,
+} from "@/lib/api";
+import type {
+  ProductGroupDetail,
+  ProductDetail,
+  ProductTestData,
+  PdfInfo,
+  CoAHistoryItem,
+} from "@/lib/types";
 import { normalizeTestResults } from "@/lib/types";
 import TerpeneBar from "@/components/TerpeneBar";
 import CollapsiblePdf from "@/components/CollapsiblePdf";
@@ -108,6 +120,101 @@ function TestDataSection({ testData }: { testData: ProductTestData }) {
   );
 }
 
+function CoAHistorySection({
+  history,
+  groupId,
+  token,
+}: {
+  history: CoAHistoryItem[];
+  groupId: string;
+  token: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (history.length <= 1) return null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+      >
+        <h3 className="font-semibold text-gray-900">
+          CoA History ({history.length})
+        </h3>
+        <svg
+          className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+            expanded ? "rotate-180" : ""
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-gray-200 px-5 py-3">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-gray-500">
+                <th className="py-2 pr-4 font-medium">Lot</th>
+                <th className="py-2 pr-4 font-medium">Lab</th>
+                <th className="py-2 pr-4 font-medium">Date</th>
+                <th className="py-2 pr-4 font-medium">Report #</th>
+                <th className="py-2 font-medium">PDF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((item) => (
+                <tr
+                  key={item.product_id}
+                  className={`border-b border-gray-100 ${
+                    item.is_latest ? "bg-blue-50/50" : ""
+                  }`}
+                >
+                  <td className="py-2 pr-4 text-gray-800">
+                    {item.lot_number}
+                    {item.is_latest && (
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                        Latest
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-gray-700">{item.lab}</td>
+                  <td className="py-2 pr-4 text-gray-700">
+                    {item.test_date ?? "-"}
+                  </td>
+                  <td className="py-2 pr-4 text-gray-700">
+                    {item.report_number ?? "-"}
+                  </td>
+                  <td className="py-2">
+                    <a
+                      href={getProductGroupCoaPdfUrl(groupId, item.product_id, token)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-xs"
+                    >
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProductDetailPage({
   params,
 }: {
@@ -115,19 +222,40 @@ export default function ProductDetailPage({
 }) {
   const { token, id } = use(params);
 
+  const [groupDetail, setGroupDetail] = useState<ProductGroupDetail | null>(null);
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isGroupView, setIsGroupView] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      getProduct(id, token),
-      getProductPdfInfo(id, token).catch(() => null),
-    ])
-      .then(([prod, info]) => {
-        setProduct(prod);
-        setPdfInfo(info);
+    // Try to load as a product group first, then fall back to individual product
+    getProductGroup(id, token)
+      .then((group) => {
+        setGroupDetail(group);
+        setIsGroupView(true);
+        // Load the latest product's full detail
+        const latestId = group.latest_product?.id;
+        if (latestId) {
+          return Promise.all([
+            getProduct(latestId, token),
+            getProductPdfInfo(latestId, token).catch(() => null),
+          ]).then(([prod, info]) => {
+            setProduct(prod);
+            setPdfInfo(info);
+          });
+        }
+      })
+      .catch(() => {
+        // Not a group — try as individual product
+        return Promise.all([
+          getProduct(id, token),
+          getProductPdfInfo(id, token).catch(() => null),
+        ]).then(([prod, info]) => {
+          setProduct(prod);
+          setPdfInfo(info);
+        });
       })
       .catch((err) => setError(err.message || "Failed to load product."))
       .finally(() => setLoading(false));
@@ -158,6 +286,11 @@ export default function ProductDetailPage({
     );
   }
 
+  const displayName = isGroupView && groupDetail ? groupDetail.name : product.name;
+  const displayStrainType = isGroupView && groupDetail ? groupDetail.strain_type : product.strain_type;
+  const displayTier = isGroupView && groupDetail ? groupDetail.tier : product.tier;
+  const displayTags = isGroupView && groupDetail ? groupDetail.tags : product.tags;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -187,18 +320,23 @@ export default function ProductDetailPage({
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {product.name}
+                {displayName}
               </h1>
-              {product.strain_type && (
-                <p className="text-gray-500 mt-1">{product.strain_type}</p>
+              {displayStrainType && (
+                <p className="text-gray-500 mt-1">{displayStrainType}</p>
+              )}
+              {isGroupView && groupDetail && groupDetail.coa_count > 1 && (
+                <p className="text-xs text-blue-600 mt-1">
+                  {groupDetail.coa_count} CoAs on file
+                </p>
               )}
             </div>
             <span
               className={`text-sm font-medium px-3 py-1 rounded border shrink-0 ${
-                tierColors[product.tier] ?? "bg-blue-50 text-blue-700 border-blue-200"
+                tierColors[displayTier] ?? "bg-blue-50 text-blue-700 border-blue-200"
               }`}
             >
-              {product.tier}
+              {displayTier}
             </span>
           </div>
 
@@ -233,9 +371,9 @@ export default function ProductDetailPage({
             )}
           </div>
 
-          {product.tags.length > 0 && (
+          {displayTags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-4 pt-4 border-t border-gray-100">
-              {product.tags.map((tag) => (
+              {displayTags.map((tag) => (
                 <span
                   key={tag}
                   className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
@@ -293,6 +431,15 @@ export default function ProductDetailPage({
           <p className="text-gray-500 text-center py-8">
             No test data available for this product.
           </p>
+        )}
+
+        {/* CoA History */}
+        {isGroupView && groupDetail && (
+          <CoAHistorySection
+            history={groupDetail.coa_history}
+            groupId={groupDetail.id}
+            token={token}
+          />
         )}
       </div>
     </div>

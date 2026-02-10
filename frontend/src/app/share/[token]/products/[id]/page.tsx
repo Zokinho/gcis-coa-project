@@ -112,13 +112,16 @@ export default function ShareProductDetailPage({
   const { token, id } = use(params);
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [allProducts, setAllProducts] = useState<ProductDetail[]>([]);
   const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   useEffect(() => {
     getCuratedShareProducts(token)
       .then((products) => {
+        setAllProducts(products);
         const found = products.find((p) => p.id === id);
         if (!found) throw new Error("Product not found in this share");
         setProduct(found);
@@ -153,6 +156,14 @@ export default function ShareProductDetailPage({
       </div>
     );
   }
+
+  // Find sibling CoAs in the same product group
+  const siblings = product.product_group_id
+    ? allProducts.filter(
+        (p) =>
+          p.product_group_id === product.product_group_id && p.id !== product.id
+      )
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -248,6 +259,70 @@ export default function ShareProductDetailPage({
           <p className="text-gray-500 text-center py-8">
             No test data available for this product.
           </p>
+        )}
+
+        {/* CoA History */}
+        {siblings.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setHistoryExpanded(!historyExpanded)}
+              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="font-semibold text-gray-900">
+                Other CoAs ({siblings.length + 1} total)
+              </h3>
+              <svg
+                className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                  historyExpanded ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {historyExpanded && (
+              <div className="border-t border-gray-200 px-5 py-3">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-gray-500">
+                      <th className="py-2 pr-4 font-medium">Lot</th>
+                      <th className="py-2 pr-4 font-medium">Lab</th>
+                      <th className="py-2 pr-4 font-medium">Date</th>
+                      <th className="py-2 font-medium">PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {siblings.map((sib) => (
+                      <tr key={sib.id} className="border-b border-gray-100">
+                        <td className="py-2 pr-4 text-gray-800">{sib.lot_number}</td>
+                        <td className="py-2 pr-4 text-gray-700">{sib.lab}</td>
+                        <td className="py-2 pr-4 text-gray-700">{sib.test_date ?? "-"}</td>
+                        <td className="py-2">
+                          <a
+                            href={getCuratedSharePdfUrl(token, sib.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline text-xs"
+                          >
+                            Download
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

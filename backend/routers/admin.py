@@ -23,6 +23,7 @@ from backend.models import (
     JobStatus,
     Product,
     ProductDetailResponse,
+    ProductGroup,
     ProductPhoto,
     ProductPhotoResponse,
     ProductStatus,
@@ -175,6 +176,12 @@ def update_product(
         product.tags = body.tags
     if body.available is not None:
         product.available = body.available
+    if body.product_group_id is not None:
+        # Verify group exists
+        group = db.query(ProductGroup).filter(ProductGroup.id == body.product_group_id).first()
+        if not group:
+            raise HTTPException(status_code=404, detail="Product group not found")
+        product.product_group_id = body.product_group_id
 
     db.commit()
     db.refresh(product)
@@ -197,6 +204,7 @@ def get_stats(
     products = db.query(Product).all()
     published_count = sum(1 for p in products if p.status == ProductStatus.published)
     token_count = db.query(AccessToken).count()
+    group_count = db.query(ProductGroup).count()
 
     return DashboardStats(
         total_jobs=len(jobs),
@@ -209,6 +217,7 @@ def get_stats(
         total_products=len(products),
         products_published=published_count,
         total_tokens=token_count,
+        total_product_groups=group_count,
     )
 
 
@@ -295,6 +304,10 @@ def list_client_products(
         syncs = db.query(SyncLog).filter(SyncLog.product_id == p.id).all()
         photos = db.query(ProductPhoto).filter(ProductPhoto.product_id == p.id).all()
 
+        group_name = None
+        if p.product_group_id and p.product_group:
+            group_name = p.product_group.name
+
         result.append(
             ClientProductResponse(
                 id=p.id,
@@ -311,6 +324,8 @@ def list_client_products(
                 job_id=p.job.id if p.job else None,
                 syncs=[SyncLogResponse.model_validate(s) for s in syncs],
                 photos=[ProductPhotoResponse.model_validate(ph) for ph in photos],
+                product_group_id=p.product_group_id,
+                product_group_name=group_name,
             )
         )
     return result

@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   validateCuratedShare,
   getCuratedShareProducts,
-  getCuratedSharePdfUrl,
 } from "@/lib/api";
 import type { ProductDetail } from "@/lib/types";
 
@@ -59,18 +58,40 @@ export default function ShareCatalogPage({
     );
   }
 
+  // Group products by product_group_id for display
+  const grouped = new Map<string, ProductDetail[]>();
+  const ungrouped: ProductDetail[] = [];
+  for (const p of products) {
+    if (p.product_group_id) {
+      const arr = grouped.get(p.product_group_id) || [];
+      arr.push(p);
+      grouped.set(p.product_group_id, arr);
+    } else {
+      ungrouped.push(p);
+    }
+  }
+
+  // Combine: one card per group (using latest), plus ungrouped
+  const displayItems = [
+    ...Array.from(grouped.values()).map((items) => {
+      const latest = items.find((p) => p.is_latest) || items[0];
+      return { product: latest, coaCount: items.length };
+    }),
+    ...ungrouped.map((p) => ({ product: p, coaCount: 1 })),
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{label}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {products.length} product{products.length !== 1 ? "s" : ""}
+            {displayItems.length} product{displayItems.length !== 1 ? "s" : ""}
           </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => {
+          {displayItems.map(({ product, coaCount }) => {
             // Extract THC/CBD from test_data
             let thc: string | null = null;
             let cbd: string | null = null;
@@ -116,6 +137,12 @@ export default function ShareCatalogPage({
                   {thc && <p className="font-medium">THC: {thc}%</p>}
                   {cbd && <p className="font-medium">CBD: {cbd}%</p>}
                 </div>
+
+                {coaCount > 1 && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    {coaCount} CoAs available
+                  </p>
+                )}
               </Link>
             );
           })}
