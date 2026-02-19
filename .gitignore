@@ -1,5 +1,16 @@
 # Environment
 .env
+.env.*
+!.env.example
+
+# Secrets & credentials
+*.pem
+*.key
+*.p12
+*.secret
+credentials.json
+secrets.json
+*service-account*.json
 venv/
 __pycache__/
 *.pyc
