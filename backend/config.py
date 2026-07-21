@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     # Storage
     storage_path: Path = Path("./storage")
 
+    # API key (for service-to-service auth from marketplace)
+    coa_api_key: str = ""
+
     # CORS
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173,https://harvex.app"
 
     # Server
     host: str = "0.0.0.0"
@@ -34,6 +37,11 @@ class Settings(BaseSettings):
     ms_tenant_id: str = ""
     ms_client_id: str = ""
     ms_client_secret: str = ""
+
+    # SharePoint default upload destination (for automated uploads)
+    sp_default_site_id: str = ""
+    sp_default_drive_id: str = ""
+    sp_default_folder_id: str = ""
 
     # Zoho CRM
     zoho_client_id: str = ""

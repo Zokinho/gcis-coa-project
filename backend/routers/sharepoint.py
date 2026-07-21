@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.auth import get_admin_user
+from backend.auth import get_admin_user, get_api_or_admin_user
 from backend.config import settings
 from backend.database import get_db
 from backend.models import CoAJob, JobStatus, Product, SyncLog, SyncTarget
@@ -27,6 +27,10 @@ class UploadRequest(BaseModel):
     site_id: str
     drive_id: str
     folder_id: str
+
+
+class UploadByJobRequest(BaseModel):
+    job_id: str
 
 
 # ── Browse ────────────────────────────────────────────────────────
@@ -128,4 +132,62 @@ async def upload_to_sharepoint(
         return result
     except Exception as exc:
         logger.exception("Graph API error uploading PDF")
+        raise HTTPException(status_code=502, detail=f"SharePoint upload failed: {exc}")
+
+
+@router.post("/api/sharepoint/upload-by-job")
+async def upload_by_job(
+    body: UploadByJobRequest,
+    db: Session = Depends(get_db),
+    _user: str = Depends(get_api_or_admin_user),
+):
+    """Upload a published CoA PDF to SharePoint using default destination config.
+
+    Accepts either X-API-Key or session_token cookie for auth.
+    Uses SP_DEFAULT_SITE_ID / SP_DEFAULT_DRIVE_ID / SP_DEFAULT_FOLDER_ID.
+    """
+    if not settings.sp_default_site_id or not settings.sp_default_drive_id or not settings.sp_default_folder_id:
+        raise HTTPException(status_code=503, detail="SharePoint default destination not configured")
+
+    job = db.query(CoAJob).filter(CoAJob.id == body.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.published:
+        raise HTTPException(status_code=400, detail="Job must be published before uploading to SharePoint")
+    if not job.product_id:
+        raise HTTPException(status_code=400, detail="Job has no linked product")
+
+    product = db.query(Product).filter(Product.id == job.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    pub_dir = settings.published_path / product.id
+    pdfs = list(pub_dir.glob("*.pdf"))
+    if not pdfs:
+        raise HTTPException(status_code=404, detail="Published PDF not found on disk")
+
+    pdf_path = pdfs[0]
+
+    try:
+        result = await upload_pdf(
+            site_id=settings.sp_default_site_id,
+            drive_id=settings.sp_default_drive_id,
+            folder_id=settings.sp_default_folder_id,
+            file_path=pdf_path,
+            filename=pdf_path.name,
+        )
+
+        sync_log = SyncLog(
+            product_id=product.id,
+            target=SyncTarget.sharepoint,
+            external_id=result.get("id", ""),
+            external_url=result.get("web_url", ""),
+            extra={"name": result.get("name", "")},
+        )
+        db.add(sync_log)
+        db.commit()
+
+        return result
+    except Exception as exc:
+        logger.exception("Graph API error uploading PDF (upload-by-job)")
         raise HTTPException(status_code=502, detail=f"SharePoint upload failed: {exc}")
