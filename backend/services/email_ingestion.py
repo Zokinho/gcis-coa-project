@@ -31,6 +31,36 @@ logger = logging.getLogger(__name__)
 _stop_event = threading.Event()
 _poller_thread: threading.Thread | None = None
 
+
+# ── Sender validation ───────────────────────────────────────────
+
+
+def _is_sender_allowed(sender: str) -> bool:
+    """Check if the sender is in the configured allowlist.
+
+    Returns True if no allowlist is configured (accept all) or if the
+    sender's email address or domain matches an entry in the allowlist.
+    """
+    allowlist = settings.sender_allowlist
+    if not allowlist:
+        return True
+
+    # Extract email from "Name <email@domain.com>" format
+    match = re.search(r"<([^>]+)>", sender)
+    addr = match.group(1).strip().lower() if match else sender.strip().lower()
+
+    if not addr or "@" not in addr:
+        return False
+
+    domain = "@" + addr.split("@", 1)[1]
+
+    for entry in allowlist:
+        if entry == addr or entry == domain:
+            return True
+
+    return False
+
+
 # ── Attachment classification ────────────────────────────────────
 
 COA_KEYWORDS = re.compile(r"(?i)(coa|certificate|analysis|lab.?report|test.?result)")
@@ -138,6 +168,13 @@ def _extract_attachments(msg: email.message.Message) -> list[tuple[str, bytes]]:
             continue
         data = part.get_payload(decode=True)
         if data:
+            max_size = settings.max_pdf_file_size_mb * 1024 * 1024
+            if len(data) > max_size:
+                logger.warning(
+                    "Attachment %s too large (%d bytes, limit %d MB) — skipped",
+                    filename, len(data), settings.max_pdf_file_size_mb,
+                )
+                continue
             attachments.append((filename, data))
     return attachments
 
@@ -147,6 +184,12 @@ def _extract_attachments(msg: email.message.Message) -> list[tuple[str, bytes]]:
 
 def _process_single_email(msg: email.message.Message, db: Session) -> EmailIngestion | None:
     """Parse one email message, create records, and trigger CoA processing."""
+    # Sender allowlist check
+    sender_raw = msg.get("From", "")
+    if not _is_sender_allowed(sender_raw):
+        logger.warning("Email from non-allowed sender skipped: %s", sender_raw)
+        return None
+
     message_id = msg.get("Message-ID", "")
     if not message_id:
         message_id = f"no-msgid-{uuid.uuid4()}"
@@ -197,6 +240,14 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
         stored_path = attach_dir / stored_name
 
         stored_path.write_bytes(data)
+
+        # Magic byte validation for PDFs
+        if att_type == AttachmentType.coa_pdf and data[:5] != b"%PDF-":
+            logger.warning(
+                "Attachment %s has .pdf extension but invalid magic bytes — reclassified as product_photo",
+                filename,
+            )
+            att_type = AttachmentType.product_photo
 
         attachment = EmailAttachment(
             email_ingestion_id=ingestion.id,

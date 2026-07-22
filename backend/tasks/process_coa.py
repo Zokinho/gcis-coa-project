@@ -1,6 +1,7 @@
 """CoA processing pipeline — runs the full extraction workflow for an uploaded PDF."""
 
 import logging
+import shutil
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -125,6 +126,12 @@ def process_coa(self, job_id: str) -> None:
                 _fail(db, job, str(e))
         except Exception:
             logger.exception("Failed to update job status on error")
+
+        # Clean up working directory on failure
+        work_dir = settings.working_path / job_id
+        if work_dir.exists():
+            shutil.rmtree(work_dir, ignore_errors=True)
+            logger.info("[%s] Cleaned up working directory", job_id)
 
         # Retry transient errors via Celery (only when running as a Celery task)
         if hasattr(self, "request") and self.request.id is not None:

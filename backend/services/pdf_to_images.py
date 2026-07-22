@@ -23,8 +23,13 @@ def convert_pdf_to_images(pdf_path: Path, output_dir: Path) -> list[Path]:
     max_dim = settings.max_image_dimension
 
     logger.info("Converting PDF to images: %s", pdf_path.name)
-    pages = convert_from_path(pdf_path, dpi=200)
+    pages = convert_from_path(pdf_path, dpi=200, timeout=settings.pdf_conversion_timeout_seconds)
     logger.info("PDF has %d pages", len(pages))
+
+    if len(pages) > settings.max_pdf_page_count:
+        raise ValueError(
+            f"PDF has {len(pages)} pages, exceeding limit of {settings.max_pdf_page_count}"
+        )
 
     image_paths: list[Path] = []
     for i, page in enumerate(pages):

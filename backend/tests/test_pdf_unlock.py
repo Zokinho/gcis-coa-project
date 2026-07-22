@@ -1,6 +1,7 @@
 """Tests for PDF unlock service."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pikepdf
 import pytest
@@ -79,6 +80,36 @@ def test_unlock_nonexistent_file(tmp_path: Path):
     success, was_locked, error = unlock_pdf(tmp_path / "nope.pdf", output)
     assert success is False
     assert error is not None
+
+
+def test_unlock_rejects_non_pdf_file(tmp_path: Path):
+    """A file with .pdf extension but non-PDF content should be rejected."""
+    fake_pdf = tmp_path / "fake.pdf"
+    fake_pdf.write_text("This is not a PDF file at all.")
+    output = tmp_path / "output.pdf"
+    success, was_locked, error = unlock_pdf(fake_pdf, output)
+    assert success is False
+    assert was_locked is False
+    assert "bad magic bytes" in error.lower()
+    assert not output.exists()
+
+
+def test_unlock_rejects_too_many_pages(tmp_path: Path):
+    """A PDF exceeding the page count limit should be rejected."""
+    pdf = pikepdf.Pdf.new()
+    for _ in range(6):
+        pdf.add_blank_page(page_size=(612, 792))
+    path = tmp_path / "big.pdf"
+    pdf.save(path)
+
+    output = tmp_path / "output.pdf"
+    with patch("backend.services.pdf_unlock.settings") as mock_settings:
+        mock_settings.max_pdf_page_count = 5
+        success, was_locked, error = unlock_pdf(path, output)
+    assert success is False
+    assert was_locked is False
+    assert "6 pages" in error
+    assert "limit of 5" in error
 
 
 def test_unlock_real_coa():

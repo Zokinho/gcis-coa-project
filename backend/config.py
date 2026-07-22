@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     imap_folder: str = "INBOX"
     email_ingestion_enabled: bool = False
 
+    # Email ingestion security
+    email_sender_allowlist: str = ""            # Comma-separated trusted sender domains/addresses, empty = accept all
+    max_pdf_file_size_mb: int = 50              # Max attachment size in MB
+    max_pdf_page_count: int = 100               # Max pages per PDF
+    pdf_conversion_timeout_seconds: int = 120   # Timeout for pdf2image conversion
+
     # Evernote
     evernote_developer_token: str = ""
     evernote_sandbox: bool = False
@@ -83,6 +89,12 @@ class Settings(BaseSettings):
     notifications_enabled: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def sender_allowlist(self) -> list[str]:
+        if not self.email_sender_allowlist:
+            return []
+        return [s.strip().lower() for s in self.email_sender_allowlist.split(",") if s.strip()]
 
     @property
     def origins_list(self) -> list[str]:

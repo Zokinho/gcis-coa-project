@@ -1,7 +1,6 @@
 """Upload router — accepts CoA PDF uploads and kicks off processing."""
 
 import logging
-import shutil
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -29,11 +28,23 @@ async def upload_coa(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
+    # Read content for size and magic byte validation
+    content = await file.read()
+
+    max_size = settings.max_pdf_file_size_mb * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds {settings.max_pdf_file_size_mb}MB limit",
+        )
+
+    if content[:5] != b"%PDF-":
+        raise HTTPException(status_code=400, detail="File is not a valid PDF")
+
     # Save uploaded file
     upload_path = settings.uploads_path / file.filename
     try:
-        with open(upload_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+        upload_path.write_bytes(content)
     except Exception as e:
         logger.error("Failed to save upload: %s", e)
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
