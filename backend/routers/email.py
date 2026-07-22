@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from backend.auth import get_admin_user
+from backend.auth import get_admin_user, get_api_or_admin_user
 from backend.config import settings
 from backend.database import get_db
 from backend.models import (
@@ -40,7 +40,7 @@ router = APIRouter(tags=["email"])
 async def list_email_ingestions(
     status: EmailIngestionStatus | None = None,
     db: Session = Depends(get_db),
-    _admin: str = Depends(get_admin_user),
+    _admin: str = Depends(get_api_or_admin_user),
 ):
     """List email ingestions, optionally filtered by status."""
     q = db.query(EmailIngestion).order_by(EmailIngestion.created_at.desc())
@@ -56,7 +56,7 @@ async def list_email_ingestions(
 async def get_email_ingestion(
     ingestion_id: str,
     db: Session = Depends(get_db),
-    _admin: str = Depends(get_admin_user),
+    _admin: str = Depends(get_api_or_admin_user),
 ):
     """Get a single email ingestion with its attachments."""
     ingestion = db.query(EmailIngestion).filter(EmailIngestion.id == ingestion_id).first()
