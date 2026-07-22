@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     imap_poll_interval_seconds: int = 120
     imap_folder: str = "INBOX"
     email_ingestion_enabled: bool = False
+    imap_use_oauth2: bool = False  # Use OAuth2 (XOAUTH2) instead of password auth
 
     # Email ingestion security
     email_sender_allowlist: str = ""            # Comma-separated trusted sender domains/addresses, empty = accept all

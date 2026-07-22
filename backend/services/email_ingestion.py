@@ -316,6 +316,24 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
     return ingestion
 
 
+def _get_oauth2_token() -> str:
+    """Get an OAuth2 access token for IMAP using client credentials flow."""
+    from azure.identity import ClientSecretCredential
+
+    credential = ClientSecretCredential(
+        settings.ms_tenant_id,
+        settings.ms_client_id,
+        settings.ms_client_secret,
+    )
+    token = credential.get_token("https://outlook.office365.com/.default")
+    return token.token
+
+
+def _build_xoauth2_string(user: str, token: str) -> str:
+    """Build the XOAUTH2 authentication string for IMAP."""
+    return f"user={user}\x01auth=Bearer {token}\x01\x01"
+
+
 def poll_inbox_once() -> int:
     """Connect to IMAP, fetch UNSEEN messages, process them. Returns count of new emails."""
     if not settings.imap_host or not settings.imap_user:
@@ -332,7 +350,12 @@ def poll_inbox_once() -> int:
         else:
             conn = imaplib.IMAP4(settings.imap_host, settings.imap_port)
 
-        conn.login(settings.imap_user, settings.imap_password)
+        if settings.imap_use_oauth2:
+            token = _get_oauth2_token()
+            auth_string = _build_xoauth2_string(settings.imap_user, token)
+            conn.authenticate("XOAUTH2", lambda x: auth_string.encode())
+        else:
+            conn.login(settings.imap_user, settings.imap_password)
         conn.select(settings.imap_folder)
 
         # Search for unseen
