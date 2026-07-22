@@ -28,7 +28,7 @@ celery -A backend.celery_app:celery worker --loglevel=info
 celery -A backend.celery_app:celery beat --loglevel=info
 
 # Tests
-pytest backend/tests/ -q                    # 52 tests
+pytest backend/tests/ -q                    # 54 tests
 cd frontend && npx tsc --noEmit             # TypeScript check
 ```
 
@@ -44,6 +44,8 @@ MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET          # SharePoint
 ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, ZOHO_DATA_CENTER  # Zoho
 EVERNOTE_DEVELOPER_TOKEN, EVERNOTE_IS_BUSINESS, EVERNOTE_NOTEBOOK_GUID    # Evernote
 IMAP_HOST, IMAP_PORT, IMAP_USER, IMAP_PASSWORD, EMAIL_INGESTION_ENABLED  # Email
+EMAIL_SENDER_ALLOWLIST                                                   # Email security (comma-separated domains/addresses)
+MAX_PDF_FILE_SIZE_MB, MAX_PDF_PAGE_COUNT, PDF_CONVERSION_TIMEOUT_SECONDS # PDF security limits
 SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL          # Notifications
 NOTIFICATIONS_ENABLED, NOTIFICATION_ADMIN_EMAIL
 ```
@@ -61,6 +63,15 @@ NOTIFICATIONS_ENABLED, NOTIFICATION_ADMIN_EMAIL
 - Percentage-based redaction coordinates (resolution-independent)
 - Images resized to max 1568px before sending to Vision API
 - ProductGroup layer groups multiple CoAs under one strain/SKU identity
+
+### Email Ingestion Security
+- **Sender allowlist** — `EMAIL_SENDER_ALLOWLIST` restricts accepted senders by address or domain (empty = accept all)
+- **File size cap** — `MAX_PDF_FILE_SIZE_MB` (default 50) rejects oversized attachments
+- **PDF magic byte validation** — checks `%PDF-` header at email ingestion, upload endpoint, and pipeline unlock stages
+- **Page count limit** — `MAX_PDF_PAGE_COUNT` (default 100) enforced in `pdf_unlock.py` and `pdf_to_images.py`
+- **Conversion timeout** — `PDF_CONVERSION_TIMEOUT_SECONDS` (default 120) kills hung poppler subprocesses
+- **Pipeline cleanup** — working directories are removed on pipeline failure to prevent disk accumulation
+- **Upload endpoint** — validates file size (413) and magic bytes (400) before writing to disk
 
 ### Database Tables
 - `coa_jobs` — processing pipeline state
@@ -164,3 +175,4 @@ python -m backend.migrations.migrate_product_groups
 | 3 | SharePoint, Zoho, email ingestion, Evernote, Celery, notifications | Complete |
 | 4b | Sync tracking, Evernote import, curated shares, enhanced clients | Complete |
 | 5 | Multi-CoA per product (ProductGroup architecture) | Complete |
+| 6 | Email ingestion security hardening (sender allowlist, file/page limits, magic bytes, timeouts, cleanup) | Complete |
