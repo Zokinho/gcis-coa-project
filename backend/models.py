@@ -82,6 +82,7 @@ class EmailIngestion(Base):
     status: Mapped[EmailIngestionStatus] = mapped_column(Enum(EmailIngestionStatus), default=EmailIngestionStatus.pending)
     suggested_client: Mapped[str | None] = mapped_column(String(255), nullable=True)
     confirmed_client: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    extracted_products: Mapped[list | None] = mapped_column(JSON, nullable=True)  # Claude-extracted product data from body
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -497,6 +498,7 @@ class EmailIngestionResponse(BaseModel):
     status: EmailIngestionStatus
     suggested_client: str | None = None
     confirmed_client: str | None = None
+    extracted_products: list[dict] | None = None
     error_message: str | None = None
     created_at: datetime
     attachments: list[EmailAttachmentResponse] = []

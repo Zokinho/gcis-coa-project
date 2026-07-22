@@ -3,6 +3,7 @@
 import email
 import email.utils
 import imaplib
+import json
 import logging
 import re
 import threading
@@ -112,6 +113,53 @@ def suggest_client_from_email(subject: str, sender: str, body: str) -> str | Non
         return None
 
 
+# ── AI product extraction from email body ────────────────────────
+
+
+def extract_products_from_email(subject: str, sender: str, body: str) -> list[dict] | None:
+    """Use Claude to extract product data from email body text."""
+    if not settings.anthropic_api_key or not body.strip():
+        return None
+
+    prompt = (
+        "You are analyzing an email forwarded to a cannabis inventory inbox.\n"
+        "Extract ALL cannabis products mentioned in the email.\n\n"
+        "For each product, extract whatever fields you can find:\n"
+        "- product_name: strain or product name\n"
+        "- strain_type: Indica, Sativa, Hybrid, or null\n"
+        "- producer: licensed producer / LP / grower name\n"
+        "- thc_percent: THC percentage (number only)\n"
+        "- cbd_percent: CBD percentage (number only)\n"
+        "- price_per_gram: price per gram in CAD (number only)\n"
+        "- quantity_grams: available quantity in grams (number only)\n"
+        "- lot_number: lot or batch number\n"
+        "- category: Flower, Pre-Roll, Extract, Edible, Vape, etc.\n"
+        "- notes: any other relevant details (terpenes, harvest date, etc.)\n\n"
+        "Return a JSON array of product objects. If no products found, return [].\n"
+        "Return ONLY the JSON array, no other text.\n\n"
+        f"Subject: {subject}\n"
+        f"Sender: {sender}\n"
+        f"Email body:\n{body[:8000]}"
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        # Handle markdown fences
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        products = json.loads(text)
+        return products if isinstance(products, list) else None
+    except Exception:
+        logger.exception("AI product extraction from email failed")
+        return None
+
+
 # ── Image → PDF conversion ───────────────────────────────────────
 
 
@@ -137,20 +185,46 @@ def _parse_date(msg: email.message.Message) -> datetime | None:
 
 
 def _extract_body(msg: email.message.Message) -> str:
-    """Extract plain-text body from an email message."""
+    """Extract body from an email — prefers plain text, falls back to HTML conversion."""
+    import html2text
+
+    plain = ""
+    html_body = ""
+
     if msg.is_multipart():
         for part in msg.walk():
             ct = part.get_content_type()
-            if ct == "text/plain" and part.get("Content-Disposition") != "attachment":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    return payload.decode(charset, errors="replace")
+            if part.get("Content-Disposition") == "attachment":
+                continue
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            charset = part.get_content_charset() or "utf-8"
+            text = payload.decode(charset, errors="replace")
+            if ct == "text/plain" and not plain:
+                plain = text
+            elif ct == "text/html" and not html_body:
+                html_body = text
     else:
         payload = msg.get_payload(decode=True)
         if payload:
             charset = msg.get_content_charset() or "utf-8"
-            return payload.decode(charset, errors="replace")
+            text = payload.decode(charset, errors="replace")
+            if msg.get_content_type() == "text/html":
+                html_body = text
+            else:
+                plain = text
+
+    if plain:
+        return plain
+
+    if html_body:
+        converter = html2text.HTML2Text()
+        converter.ignore_links = True
+        converter.ignore_images = True
+        converter.body_width = 0  # no line wrapping
+        return converter.handle(html_body)
+
     return ""
 
 
@@ -223,6 +297,14 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
 
     raw_attachments = _extract_attachments(msg)
     if not raw_attachments:
+        # AI client suggestion + product extraction for attachment-less emails
+        suggested = suggest_client_from_email(subject, sender, body)
+        ingestion.suggested_client = suggested
+        if body.strip():
+            products = extract_products_from_email(subject, sender, body)
+            if products:
+                ingestion.extracted_products = products
+                logger.info("Extracted %d products from email body (no attachments): %s", len(products), subject)
         ingestion.status = EmailIngestionStatus.review
         db.commit()
         try:
@@ -270,6 +352,13 @@ def _process_single_email(msg: email.message.Message, db: Session) -> EmailInges
     # AI client suggestion
     suggested = suggest_client_from_email(subject, sender, body)
     ingestion.suggested_client = suggested
+
+    # AI product extraction from email body
+    if body.strip():
+        products = extract_products_from_email(subject, sender, body)
+        if products:
+            ingestion.extracted_products = products
+            logger.info("Extracted %d products from email body: %s", len(products), subject)
 
     # Process CoA attachments through pipeline
     for att in coa_attachments:
