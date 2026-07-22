@@ -44,6 +44,7 @@ MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET          # SharePoint
 ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, ZOHO_DATA_CENTER  # Zoho
 EVERNOTE_DEVELOPER_TOKEN, EVERNOTE_IS_BUSINESS, EVERNOTE_NOTEBOOK_GUID    # Evernote
 IMAP_HOST, IMAP_PORT, IMAP_USER, IMAP_PASSWORD, EMAIL_INGESTION_ENABLED  # Email
+IMAP_USE_OAUTH2                                                        # OAuth2 XOAUTH2 for M365 (reuses MS_* creds)
 EMAIL_SENDER_ALLOWLIST                                                   # Email security (comma-separated domains/addresses)
 MAX_PDF_FILE_SIZE_MB, MAX_PDF_PAGE_COUNT, PDF_CONVERSION_TIMEOUT_SECONDS # PDF security limits
 SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL          # Notifications
@@ -63,6 +64,17 @@ NOTIFICATIONS_ENABLED, NOTIFICATION_ADMIN_EMAIL
 - Percentage-based redaction coordinates (resolution-independent)
 - Images resized to max 1568px before sending to Vision API
 - ProductGroup layer groups multiple CoAs under one strain/SKU identity
+
+### IMAP OAuth2 Authentication
+- **Toggle**: `IMAP_USE_OAUTH2=true` switches from basic auth (`conn.login`) to OAuth2 (`conn.authenticate("XOAUTH2", ...)`)
+- **Credentials**: Reuses existing `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` (same Azure AD app as SharePoint)
+- **Token flow**: Client credentials → `https://outlook.office365.com/.default` scope via `azure.identity.ClientSecretCredential` (sync, not async)
+- **`IMAP_PASSWORD`** is not needed when OAuth2 is enabled
+- **Azure AD prerequisites**:
+  1. App registration → API permissions → `Office 365 Exchange Online` → `IMAP.AccessAsApp` (application) → admin consent granted
+  2. Exchange Online service principal registered: `New-ServicePrincipal -AppId <MS_CLIENT_ID> -ServiceId <object-id>`
+  3. Mailbox access granted: `Add-MailboxPermission -Identity "inventory@harvex.ca" -User <ServiceId> -AccessRights FullAccess`
+- **Propagation**: Exchange service principal changes can take up to 30 minutes to take effect
 
 ### Email Ingestion Security
 - **Sender allowlist** — `EMAIL_SENDER_ALLOWLIST` restricts accepted senders by address or domain (empty = accept all)
@@ -176,3 +188,4 @@ python -m backend.migrations.migrate_product_groups
 | 4b | Sync tracking, Evernote import, curated shares, enhanced clients | Complete |
 | 5 | Multi-CoA per product (ProductGroup architecture) | Complete |
 | 6 | Email ingestion security hardening (sender allowlist, file/page limits, magic bytes, timeouts, cleanup) | Complete |
+| 7 | OAuth2 IMAP auth for M365 shared mailbox (XOAUTH2, client credentials flow) | Complete |
