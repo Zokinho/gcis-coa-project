@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.config import settings
 from backend.database import get_db
 from backend.models import (
-    CoAJob, JobResponse, JobStatus, Product, ProductResponse,
+    CoAJob, JobResponse, JobStatus, Product, ProductDetailResponse, ProductResponse,
     RedactionRegion, RedactionRegionResponse, RedactionToggle,
 )
 
@@ -92,7 +92,7 @@ def get_page_image(job_id: str, page_num: int, db: Session = Depends(get_db)):
     return FileResponse(image_path, media_type="image/png")
 
 
-@router.get("/jobs/{job_id}/product", response_model=ProductResponse)
+@router.get("/jobs/{job_id}/product", response_model=ProductDetailResponse)
 def get_job_product(job_id: str, db: Session = Depends(get_db)):
     """Get the extracted product for a job."""
     job = db.query(CoAJob).filter(CoAJob.id == job_id).first()
